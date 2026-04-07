@@ -1,6 +1,6 @@
 # Frozen Interfaces
 
-These API contracts are stable as of Phase 5 (commit e62c427).
+These API contracts are stable as of Phase 7 (tag phase7-stable).
 Do NOT change request/response shapes without a migration plan.
 
 ## Endpoints
@@ -25,6 +25,16 @@ Do NOT change request/response shapes without a migration plan.
 - `GET  /execution/capabilities` — OpenHands config and supported request types
 - `POST /execution/openhands` — submit an execution request
 - `GET  /execution/status/{task_id}` — check execution task status
+
+### GitHub Execution (Phase 6)
+- `GET  /execution/github/capabilities` — GitHub execution config and supported request types
+- `POST /execution/github/` — submit a GitHub execution request
+- `GET  /execution/github/status/{task_id}` — check GitHub execution task status
+
+### GitHub Mutation (Phase 7)
+- `GET  /execution/github/mutation/capabilities` — mutation config and supported request types
+- `POST /execution/github/mutation/` — submit a mutation request (approval-gated)
+- `GET  /execution/github/mutation/status/{task_id}` — check mutation task status
 
 ### Core (Phase 1)
 - `GET  /` — health check
@@ -58,6 +68,14 @@ Do NOT change request/response shapes without a migration plan.
 {"decision_notes": "string|null"}
 // Response
 {"id": 0, "task_id": 0, "action_name": "string", "requested_action": {}, "status": "string", "decision_notes": "string|null"}
+```
+
+### POST /execution/github/mutation/
+```json
+// Request
+{"user_id": 1, "conversation_id": null, "request_type": "create_branch|create_patch_artifact|create_pr_draft|execute_repo_write|merge_request", "title": "string", "repo": "string|null", "objective": "string", "context": {}}
+// Response
+{"task_id": 0, "execution_mode": "string", "result": {}}
 ```
 
 ## Rules
