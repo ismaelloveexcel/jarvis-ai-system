@@ -8,6 +8,8 @@ from app.guardrails.policy import (
     ALWAYS_ALLOWED_EXECUTION_TYPES,
     ALWAYS_ALLOWED_GITHUB_TYPES,
     APPROVAL_REQUIRED_GITHUB_TYPES,
+    APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES,
+    BLOCKED_GITHUB_MUTATION_TYPES,
 )
 
 
@@ -78,4 +80,22 @@ class GuardrailService:
         return GuardrailResult({
             "decision": "blocked",
             "reason": f"GitHub request type '{request_type}' is not allowed.",
+        })
+
+    def evaluate_github_mutation(self, request_type: str, payload: dict) -> GuardrailResult:
+        if request_type in BLOCKED_GITHUB_MUTATION_TYPES:
+            return GuardrailResult({
+                "decision": "blocked",
+                "reason": f"GitHub mutation '{request_type}' remains blocked by policy.",
+            })
+
+        if request_type in APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES:
+            return GuardrailResult({
+                "decision": "approval_required",
+                "reason": f"GitHub mutation '{request_type}' requires approval.",
+            })
+
+        return GuardrailResult({
+            "decision": "blocked",
+            "reason": f"GitHub mutation '{request_type}' is not allowed.",
         })

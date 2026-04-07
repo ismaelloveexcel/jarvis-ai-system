@@ -46,3 +46,14 @@ ALWAYS_ALLOWED_GITHUB_TYPES = {
 APPROVAL_REQUIRED_GITHUB_TYPES = {
     "repo_write_request",
 }
+
+APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES = {
+    "create_branch",
+    "create_patch_artifact",
+    "create_pr_draft",
+    "execute_repo_write",
+}
+
+BLOCKED_GITHUB_MUTATION_TYPES = {
+    "merge_request",
+}

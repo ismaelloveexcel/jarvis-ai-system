@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     GITHUB_DEFAULT_REPO: str = ""
     GITHUB_TOKEN: str = ""
 
+    GITHUB_MUTATION_ENABLED: bool = False
+    GITHUB_MUTATION_MODE: Literal["stub", "live"] = "stub"
+    GITHUB_DEFAULT_BASE_BRANCH: str = "main"
+    GITHUB_DEFAULT_DRAFT_PR: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

@@ -19,7 +19,7 @@ export default function RightPanel({ taskId, conversationId, executionMode }: Pr
         </div>
         <div className="bg-zinc-800 rounded-xl p-3">
           <div className="text-zinc-400">Phase</div>
-          <div>Phase 6</div>
+          <div>Phase 7</div>
         </div>
         <div className="bg-zinc-800 rounded-xl p-3">
           <div className="text-zinc-400">Execution Mode</div>

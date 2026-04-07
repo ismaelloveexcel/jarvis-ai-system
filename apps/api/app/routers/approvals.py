@@ -9,6 +9,7 @@ from app.services.task_service import TaskService
 from app.services.action_service import ActionService
 from app.services.openhands_service import OpenHandsService
 from app.services.github_execution_service import GitHubExecutionService
+from app.services.github_mutation_service import GitHubMutationService
 from app.models.task import TaskStatus
 
 router = APIRouter()
@@ -38,6 +39,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
     action_service = ActionService()
     openhands_service = OpenHandsService()
     github_service = GitHubExecutionService()
+    github_mutation_service = GitHubMutationService()
 
     approval = approval_service.get_approval(approval_id)
     if not approval:
@@ -65,6 +67,55 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                     title=task.title,
                     objective=approval.requested_action.get("objective", ""),
                     context=approval.requested_action.get("context", {}),
+                )
+            elif approval.action_name.startswith("github_mutation:"):
+                request_type = approval.action_name.split("github_mutation:", 1)[1]
+                repo = approval.requested_action.get("repo", "unknown/repo")
+                result = github_mutation_service.run(
+                    request_type=request_type,
+                    repo=repo,
+                    title=approval.requested_action.get("title", task.title),
+                    objective=approval.requested_action.get("objective", ""),
+                    context=approval.requested_action.get("context", {}),
+                )
+                task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+
+                if request_type == "create_branch":
+                    audit_service.log(
+                        event_type="github_branch_created",
+                        event_status="completed",
+                        details_json=result,
+                        task_id=task.id,
+                    )
+                elif request_type == "create_patch_artifact":
+                    audit_service.log(
+                        event_type="github_patch_artifact_created",
+                        event_status="completed",
+                        details_json=result,
+                        task_id=task.id,
+                    )
+                elif request_type == "create_pr_draft":
+                    audit_service.log(
+                        event_type="github_pr_created",
+                        event_status="completed",
+                        details_json=result,
+                        task_id=task.id,
+                    )
+                else:
+                    audit_service.log(
+                        event_type="github_mutation_approved",
+                        event_status="completed",
+                        details_json=result,
+                        task_id=task.id,
+                    )
+
+                return ApprovalResponse(
+                    id=approval.id,
+                    task_id=approval.task_id,
+                    action_name=approval.action_name,
+                    requested_action=approval.requested_action or {},
+                    status=approval.status,
+                    decision_notes=approval.decision_notes,
                 )
             elif approval.action_name.startswith("github:"):
                 request_type = approval.action_name.split("github:", 1)[1]

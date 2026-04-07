@@ -18,7 +18,7 @@ type Approval = {
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 6. I can chat, run guarded actions, submit OpenHands execution requests, and handle GitHub workflow requests." }
+    { role: "assistant", content: "Hello. I'm Jarvis Phase 7. I can chat, run guarded actions, use OpenHands, manage GitHub workflows, and prepare approval-gated GitHub mutations." }
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -157,6 +157,35 @@ export default function HomePage() {
     }
   };
 
+  const runGitHubMutation = async (requestType: string, title: string, objective: string, context: Record<string, unknown> = {}) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/execution/github/mutation/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: 1,
+          conversation_id: conversationId,
+          request_type: requestType,
+          title,
+          repo: "ismaelloveexcel/jarvis-ai-system",
+          objective,
+          context
+        })
+      });
+
+      const data = await res.json();
+      setTaskId(data.task_id ?? null);
+      setExecutionMode(data.execution_mode || "pending_approval");
+      setMessages((prev) => [...prev, { role: "assistant", content: `Mutation [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
+      await loadApprovals();
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: `Mutation ${requestType} failed.` }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const approveItem = async (approvalId: number) => {
     try {
       await fetch(`${apiBase}/approvals/${approvalId}/approve`, {
@@ -228,8 +257,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex gap-2 flex-wrap">
-            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "example/phase6.txt", content: "Hello from Phase 6!\n" + new Date().toISOString() })} disabled={loading}>Safe File Write</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "restricted/p6.txt", content: "Requires approval" })} disabled={loading}>Approval Write</button>
+            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "example/phase7.txt", content: "Hello from Phase 7!\n" + new Date().toISOString() })} disabled={loading}>Safe File Write</button>
+            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "restricted/p7.txt", content: "Requires approval" })} disabled={loading}>Approval Write</button>
             <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://httpbin.org/get" })} disabled={loading}>Allowed HTTP</button>
             <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://google.com" })} disabled={loading}>Blocked HTTP</button>
           </div>
@@ -246,6 +275,13 @@ export default function HomePage() {
             <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("patch_proposal", "Patch proposal", "Draft a patch proposal for a new route", { branch_name: "feature/patch-proposal", pr_title: "Proposal: add new route" })} disabled={loading}>Patch Proposal</button>
             <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("pr_draft", "Draft PR", "Prepare a draft PR for review")} disabled={loading}>PR Draft</button>
             <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runGitHubExecution("repo_write_request", "Write request", "Prepare a write request for a feature branch", { target_branch: "main", proposed_branch: "feature/github-phase6", requested_changes: ["add workflow", "update docs"] })} disabled={loading}>Write Request (approval)</button>
+          </div>
+
+          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
+            <span className="text-xs text-zinc-500 self-center mr-2">Mutations:</span>
+            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_branch", "Create feature branch", "Prepare a feature branch for docs updates", { base_branch: "main", feature_branch: "feature/phase7-branch" })} disabled={loading}>Create Branch</button>
+            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_pr_draft", "Create draft PR", "Prepare a draft PR for proposed docs changes", { base_branch: "main", feature_branch: "feature/phase7-pr", pr_title: "Draft PR: docs changes" })} disabled={loading}>Create PR Draft</button>
+            <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runGitHubMutation("merge_request", "Attempt merge", "Try to merge feature branch into main", { base_branch: "main", feature_branch: "feature/phase7-pr" })} disabled={loading}>Attempt Merge (Blocked)</button>
           </div>
         </div>
       </main>
