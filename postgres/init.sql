@@ -87,3 +87,17 @@ CREATE INDEX IF NOT EXISTS idx_approvals_task_id ON approvals(task_id);
 CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_task_id ON audit_logs(task_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON audit_logs(event_type);
+
+-- Phase 8 tables
+
+CREATE TABLE IF NOT EXISTS task_artifacts (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+    artifact_type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    metadata_json JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_artifacts_task_id ON task_artifacts(task_id);

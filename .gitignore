@@ -23,3 +23,7 @@ postgres_data/
 # Jarvis local generated outputs
 workspace/generated/*
 !workspace/generated/.gitkeep
+
+# Jarvis artifact outputs
+workspace/artifacts/*
+!workspace/artifacts/.gitkeep

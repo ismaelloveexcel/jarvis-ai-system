@@ -6,3 +6,4 @@ from app.models.task import Task, TaskStatus
 from app.models.memory import Memory
 from app.models.approval import Approval
 from app.models.audit_log import AuditLog
+from app.models.task_artifact import TaskArtifact
