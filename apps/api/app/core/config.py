@@ -40,9 +40,9 @@ class Settings(BaseSettings):
     GITHUB_MUTATION_LIVE_ENABLED: bool = False
     GITHUB_ALLOWED_WRITE_REPOS: str = ""
 
-    OPS_ENABLED: bool = False
+    OPS_ENABLED: bool = True
     OPS_MODE: Literal["stub", "live_safe"] = "stub"
-    OPS_DEFAULT_ENVIRONMENT: str = "staging"
+    OPS_DEFAULT_ENVIRONMENT: Literal["dev", "staging", "production"] = "dev"
     OPS_ALLOW_LIVE_MAINTENANCE: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

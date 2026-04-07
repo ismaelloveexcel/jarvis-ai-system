@@ -46,6 +46,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
     approval = approval_service.get_approval(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
+
     if approval.status != "pending":
         raise HTTPException(status_code=400, detail="Approval is no longer pending")
 
@@ -54,14 +55,30 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
         event_type="approval",
         event_status="approved",
         details_json={"approval_id": approval.id, "action_name": approval.action_name},
-        task_id=approval.task_id,
+        task_id=approval.task_id
     )
 
     task = task_service.get_task(approval.task_id)
     if task:
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing after approval")
 
-        if approval.action_name.startswith("execution:"):
+        if approval.action_name.startswith("ops:"):
+            request_type = approval.action_name.split("ops:", 1)[1]
+            result = ops_service.run(
+                request_type=request_type,
+                title=approval.requested_action.get("title", task.title),
+                environment=approval.requested_action.get("environment", "dev"),
+                context=approval.requested_action.get("context", {}),
+            )
+            task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+            audit_service.log(
+                event_type="ops_completed",
+                event_status="completed",
+                details_json=result,
+                task_id=task.id
+            )
+
+        elif approval.action_name.startswith("execution:"):
             request_type = approval.action_name.split("execution:", 1)[1]
             result = openhands_service.run(
                 request_type=request_type,
@@ -74,7 +91,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                 event_type="openhands_completed",
                 event_status="completed",
                 details_json=result,
-                task_id=task.id,
+                task_id=task.id
             )
 
         elif approval.action_name.startswith("github_mutation:"):
@@ -94,28 +111,28 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                     event_type="github_branch_created",
                     event_status="completed",
                     details_json=result,
-                    task_id=task.id,
+                    task_id=task.id
                 )
             elif request_type == "create_patch_artifact":
                 audit_service.log(
                     event_type="github_patch_artifact_created",
                     event_status="completed",
                     details_json=result,
-                    task_id=task.id,
+                    task_id=task.id
                 )
             elif request_type == "create_pr_draft":
                 audit_service.log(
                     event_type="github_pr_created",
                     event_status="completed",
                     details_json=result,
-                    task_id=task.id,
+                    task_id=task.id
                 )
             else:
                 audit_service.log(
                     event_type="github_mutation_approved",
                     event_status="completed",
                     details_json=result,
-                    task_id=task.id,
+                    task_id=task.id
                 )
 
         elif approval.action_name.startswith("github:"):
@@ -133,36 +150,20 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                 event_type="github_completed",
                 event_status="completed",
                 details_json=result,
-                task_id=task.id,
-            )
-
-        elif approval.action_name.startswith("ops:"):
-            request_type = approval.action_name.split("ops:", 1)[1]
-            result = ops_service.run(
-                request_type=request_type,
-                title=approval.requested_action.get("title", task.title),
-                objective=approval.requested_action.get("objective", ""),
-                context=approval.requested_action.get("context", {}),
-            )
-            task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
-            audit_service.log(
-                event_type="ops_completed",
-                event_status="completed",
-                details_json=result,
-                task_id=task.id,
+                task_id=task.id
             )
 
         else:
             result = action_service.run_action(
                 action_name=approval.action_name,
-                payload=approval.requested_action,
+                payload=approval.requested_action
             )
             task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
             audit_service.log(
                 event_type="action_execution",
                 event_status="completed",
                 details_json=result,
-                task_id=task.id,
+                task_id=task.id
             )
 
     return ApprovalResponse(
@@ -184,6 +185,7 @@ def reject_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Sess
     approval = approval_service.get_approval(approval_id)
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
+
     if approval.status != "pending":
         raise HTTPException(status_code=400, detail="Approval is no longer pending")
 
@@ -192,7 +194,7 @@ def reject_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Sess
         event_type="approval",
         event_status="rejected",
         details_json={"approval_id": approval.id, "action_name": approval.action_name},
-        task_id=approval.task_id,
+        task_id=approval.task_id
     )
 
     task = task_service.get_task(approval.task_id)
@@ -201,7 +203,7 @@ def reject_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Sess
             task,
             TaskStatus.FAILED,
             current_step="rejected",
-            result_json={"status": "rejected", "reason": approval.decision_notes or "Approval rejected"},
+            result_json={"status": "rejected", "reason": approval.decision_notes or "Approval rejected"}
         )
 
     return ApprovalResponse(

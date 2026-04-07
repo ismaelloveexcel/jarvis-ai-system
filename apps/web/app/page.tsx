@@ -18,7 +18,7 @@ type Approval = {
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 10. I now support V1 ops/deployment with approval-gated deployment, promotion, rollback, maintenance checks, and runbook lookups." }
+    { role: "assistant", content: "Hello. I'm Jarvis Phase 10. I now include the V1 ops/deployment layer with approval-gated deployment, promotion, rollback, and maintenance/runbook support." }
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -213,7 +213,7 @@ export default function HomePage() {
     }
   };
 
-  const runOpsRequest = async (requestType: string, title: string, objective: string, environment?: string, context: Record<string, unknown> = {}) => {
+  const runOpsRequest = async (requestType: string, title: string, environment: string = "dev", context: Record<string, unknown> = {}) => {
     setLoading(true);
     try {
       const res = await fetch(`${apiBase}/ops/request`, {
@@ -224,7 +224,6 @@ export default function HomePage() {
           conversation_id: conversationId,
           request_type: requestType,
           title,
-          objective,
           environment,
           context
         })
@@ -239,6 +238,16 @@ export default function HomePage() {
       setMessages((prev) => [...prev, { role: "assistant", content: `Ops ${requestType} failed.` }]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const viewRunbooks = async () => {
+    try {
+      const res = await fetch(`${apiBase}/ops/runbooks`);
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "assistant", content: `Runbooks: ${JSON.stringify(data)}` }]);
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "Runbook lookup failed." }]);
     }
   };
 
@@ -348,10 +357,10 @@ export default function HomePage() {
 
           <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
             <span className="text-xs text-zinc-500 self-center mr-2">Ops:</span>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("maintenance_check", "Maintenance check", "Check system health", "staging")} disabled={loading}>Maintenance Check</button>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("runbook_lookup", "Runbook lookup", "Look up general ops runbook", undefined, { runbook_id: "general-ops" })} disabled={loading}>Runbook Lookup</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpsRequest("deployment_request", "Deploy to staging", "Deploy latest version to staging", "staging", { version: "0.10.0", artifact_id: 1 })} disabled={loading}>Deploy (approval)</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpsRequest("rollback_request", "Rollback staging", "Rollback staging to previous version", "staging", { rollback_to_version: "0.9.0" })} disabled={loading}>Rollback (approval)</button>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("maintenance_check", "Maintenance check", "dev")} disabled={loading}>Maintenance Check</button>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("deployment_request", "Deployment request", "staging", { release: "v1-test" })} disabled={loading}>Request Deployment</button>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("rollback_request", "Rollback request", "staging")} disabled={loading}>Rollback (approval)</button>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={viewRunbooks} disabled={loading}>View Runbooks</button>
           </div>
         </div>
       </main>

@@ -25,14 +25,13 @@ services:
     environment:
       DATABASE_URL: postgresql://jarvis:changeme123@postgres:5432/jarvis_db
       JARVIS_WORKSPACE_DIR: /app/workspace
-      RUNBOOKS_DIR: /app/runbooks
     ports:
       - "8000:8000"
     depends_on:
       - postgres
     volumes:
       - ./workspace/generated:/app/workspace
-      - ./docs/runbooks:/app/runbooks
+      - ./docs/runbooks:/app/docs/runbooks
     restart: unless-stopped
 
 volumes:

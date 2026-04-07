@@ -1,9 +1,10 @@
 from urllib.parse import urlparse
 from app.guardrails.policy import (
     ALLOWED_HTTP_HOSTS,
-    ALWAYS_ALLOWED_ACTIONS,
+    APPROVAL_REQUIRED_ACTIONS,
     BLOCKED_ACTIONS,
     SAFE_WRITE_PREFIXES,
+    ALWAYS_ALLOWED_ACTIONS,
     APPROVAL_REQUIRED_EXECUTION_TYPES,
     ALWAYS_ALLOWED_EXECUTION_TYPES,
     ALWAYS_ALLOWED_GITHUB_TYPES,
@@ -24,7 +25,7 @@ class GuardrailService:
         if action_name in BLOCKED_ACTIONS:
             return GuardrailResult({
                 "decision": "blocked",
-                "reason": f"Action '{action_name}' is blocked by policy.",
+                "reason": f"Action '{action_name}' is blocked in Phase 10."
             })
 
         if action_name in ALWAYS_ALLOWED_ACTIONS:
@@ -36,22 +37,24 @@ class GuardrailService:
             if hostname not in ALLOWED_HTTP_HOSTS:
                 return GuardrailResult({
                     "decision": "blocked",
-                    "reason": f"HTTP host '{hostname}' is not allowlisted.",
+                    "reason": f"HTTP host '{hostname}' is not allowlisted."
                 })
             return GuardrailResult({"decision": "allow"})
 
         if action_name == "create_file":
             relative_path = payload.get("relative_path", "")
-            if any(relative_path.startswith(prefix) for prefix in SAFE_WRITE_PREFIXES):
+            if not any(relative_path.startswith(prefix) for prefix in SAFE_WRITE_PREFIXES):
+                return GuardrailResult({
+                    "decision": "approval_required",
+                    "reason": f"Writing to '{relative_path}' requires approval."
+                })
+            if action_name in APPROVAL_REQUIRED_ACTIONS:
                 return GuardrailResult({"decision": "allow"})
-            return GuardrailResult({
-                "decision": "approval_required",
-                "reason": f"Writing to '{relative_path}' requires approval.",
-            })
+            return GuardrailResult({"decision": "allow"})
 
         return GuardrailResult({
             "decision": "blocked",
-            "reason": f"Unknown or unapproved action '{action_name}'.",
+            "reason": f"Unknown or unapproved action '{action_name}'."
         })
 
     def evaluate_execution(self, request_type: str, payload: dict) -> GuardrailResult:
@@ -61,12 +64,12 @@ class GuardrailService:
         if request_type in APPROVAL_REQUIRED_EXECUTION_TYPES:
             return GuardrailResult({
                 "decision": "approval_required",
-                "reason": f"Execution type '{request_type}' requires approval.",
+                "reason": f"Execution type '{request_type}' requires approval."
             })
 
         return GuardrailResult({
             "decision": "blocked",
-            "reason": f"Execution type '{request_type}' is not allowed.",
+            "reason": f"Execution type '{request_type}' is not allowed."
         })
 
     def evaluate_github_execution(self, request_type: str, payload: dict) -> GuardrailResult:
@@ -76,30 +79,30 @@ class GuardrailService:
         if request_type in APPROVAL_REQUIRED_GITHUB_TYPES:
             return GuardrailResult({
                 "decision": "approval_required",
-                "reason": f"GitHub request type '{request_type}' requires approval.",
+                "reason": f"GitHub request type '{request_type}' requires approval."
             })
 
         return GuardrailResult({
             "decision": "blocked",
-            "reason": f"GitHub request type '{request_type}' is not allowed.",
+            "reason": f"GitHub request type '{request_type}' is not allowed."
         })
 
     def evaluate_github_mutation(self, request_type: str, payload: dict) -> GuardrailResult:
         if request_type in BLOCKED_GITHUB_MUTATION_TYPES:
             return GuardrailResult({
                 "decision": "blocked",
-                "reason": f"GitHub mutation '{request_type}' remains blocked by policy.",
+                "reason": f"GitHub mutation '{request_type}' remains blocked by policy."
             })
 
         if request_type in APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES:
             return GuardrailResult({
                 "decision": "approval_required",
-                "reason": f"GitHub mutation '{request_type}' requires approval.",
+                "reason": f"GitHub mutation '{request_type}' requires approval."
             })
 
         return GuardrailResult({
             "decision": "blocked",
-            "reason": f"GitHub mutation '{request_type}' is not allowed.",
+            "reason": f"GitHub mutation '{request_type}' is not allowed."
         })
 
     def evaluate_ops(self, request_type: str, payload: dict) -> GuardrailResult:
@@ -109,10 +112,10 @@ class GuardrailService:
         if request_type in APPROVAL_REQUIRED_OPS_TYPES:
             return GuardrailResult({
                 "decision": "approval_required",
-                "reason": f"Ops request '{request_type}' requires approval.",
+                "reason": f"Ops request '{request_type}' requires approval."
             })
 
         return GuardrailResult({
             "decision": "blocked",
-            "reason": f"Ops request '{request_type}' is not allowed.",
+            "reason": f"Ops request '{request_type}' is not allowed."
         })

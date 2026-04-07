@@ -1,34 +1,29 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Literal
 
 
 class OpsRequest(BaseModel):
-    user_id: int
-    conversation_id: Optional[int] = None
-    request_type: str  # deployment_request | promote_environment | rollback_request | maintenance_check | runbook_lookup
+    user_id: int = 1
+    conversation_id: int | None = None
+    request_type: Literal["deployment_request", "promote_environment", "rollback_request", "maintenance_check", "runbook_lookup"]
     title: str
-    objective: str
-    environment: Optional[str] = None
-    context: dict = {}
+    environment: Literal["dev", "staging", "production"] = "dev"
+    context: dict[str, Any] = {}
 
 
 class OpsResponse(BaseModel):
-    task_id: Optional[int] = None
-    request_type: str
+    task_id: int
     execution_mode: str
-    result: dict
+    result: dict[str, Any]
 
 
 class OpsCapabilitiesResponse(BaseModel):
     enabled: bool
     mode: str
     default_environment: str
-    allow_live_maintenance: bool
-    supported_types: list[str]
+    supported_request_types: list[str]
 
 
 class RunbookResponse(BaseModel):
-    runbook_id: str
-    title: str
-    description: str
-    steps: list[str]
+    name: str
+    path: str
