@@ -18,7 +18,7 @@ type Approval = {
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 8. I can chat, run guarded actions, use OpenHands, manage GitHub workflows, prepare approval-gated mutations, and generate review artifacts like patches and diff previews." }
+    { role: "assistant", content: "Hello. I'm Jarvis Phase 9. I can now support safe stub/live GitHub mutation execution while keeping merge blocked by policy." }
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -306,9 +306,9 @@ export default function HomePage() {
 
           <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
             <span className="text-xs text-zinc-500 self-center mr-2">Mutations:</span>
-            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_branch", "Create feature branch", "Prepare a feature branch for docs updates", { base_branch: "main", feature_branch: "feature/phase7-branch" })} disabled={loading}>Create Branch</button>
-            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_pr_draft", "Create draft PR", "Prepare a draft PR for proposed docs changes", { base_branch: "main", feature_branch: "feature/phase7-pr", pr_title: "Draft PR: docs changes" })} disabled={loading}>Create PR Draft</button>
-            <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runGitHubMutation("merge_request", "Attempt merge", "Try to merge feature branch into main", { base_branch: "main", feature_branch: "feature/phase7-pr" })} disabled={loading}>Attempt Merge (Blocked)</button>
+            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_branch", "Create feature branch", "Prepare a feature branch for docs updates", { base_branch: "main", feature_branch: "feature/phase9-branch", artifact_id: 1 })} disabled={loading}>Create Branch</button>
+            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_pr_draft", "Create draft PR", "Prepare a draft PR for proposed docs changes", { base_branch: "main", feature_branch: "feature/phase9-pr", pr_title: "Draft PR: docs changes", artifact_id: 1 })} disabled={loading}>Create PR Draft</button>
+            <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runGitHubMutation("merge_request", "Attempt merge", "Try to merge feature branch into main", { base_branch: "main", feature_branch: "feature/phase9-pr" })} disabled={loading}>Attempt Merge (Blocked)</button>
           </div>
 
           <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">

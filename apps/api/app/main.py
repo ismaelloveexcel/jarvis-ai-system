@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.8.0",
+    version="0.9.0",
     lifespan=lifespan,
 )
 
@@ -42,4 +42,4 @@ app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
 
 @app.get("/")
 def root():
-    return {"status": "healthy", "app": settings.APP_NAME, "version": "0.8.0"}
+    return {"status": "healthy", "app": settings.APP_NAME, "version": "0.9.0"}

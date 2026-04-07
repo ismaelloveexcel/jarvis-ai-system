@@ -24,6 +24,16 @@ def mutation_capabilities():
     return GitHubMutationCapabilityResponse(**caps)
 
 
+@router.get("/live-status")
+def mutation_live_status():
+    return {
+        "mode": settings.GITHUB_MUTATION_MODE,
+        "live_enabled": settings.GITHUB_MUTATION_LIVE_ENABLED,
+        "default_base_branch": settings.GITHUB_DEFAULT_BASE_BRANCH,
+        "default_draft_pr": settings.GITHUB_DEFAULT_DRAFT_PR,
+    }
+
+
 @router.get("/status/{task_id}")
 def mutation_status(task_id: int, db: Session = Depends(get_db)):
     task = TaskService(db).get_task(task_id)
@@ -139,10 +149,10 @@ def run_github_mutation(payload: GitHubMutationRequest, db: Session = Depends(ge
         task,
         TaskStatus.FAILED,
         current_step="blocked",
-        result_json={"status": "blocked", "reason": "Mutation path must remain approval-gated in Phase 7."},
+        result_json={"status": "blocked", "reason": "Mutation path must remain approval-gated in Phase 9."},
     )
     return GitHubMutationResponse(
         task_id=task.id,
         execution_mode="blocked",
-        result={"status": "blocked", "reason": "Mutation path must remain approval-gated in Phase 7."},
+        result={"status": "blocked", "reason": "Mutation path must remain approval-gated in Phase 9."},
     )

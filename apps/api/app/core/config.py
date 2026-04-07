@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     GITHUB_MUTATION_MODE: Literal["stub", "live"] = "stub"
     GITHUB_DEFAULT_BASE_BRANCH: str = "main"
     GITHUB_DEFAULT_DRAFT_PR: bool = True
+    GITHUB_MUTATION_LIVE_ENABLED: bool = False
+    GITHUB_ALLOWED_WRITE_REPOS: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
