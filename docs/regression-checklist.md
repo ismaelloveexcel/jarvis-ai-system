@@ -21,6 +21,12 @@ Run after every phase to verify nothing is broken.
 | 13 | Approved mutation completes | `POST /approvals/{id}/approve` for a mutation approval | Task status becomes `completed` with stub result |
 | 14 | merge_request stays blocked | `POST /execution/github/mutation/` with `merge_request` | `execution_mode == "blocked"` |
 | 15 | Mutation audit events present | `GET /audit-logs/` | Contains `github_mutation_requested`, `github_merge_blocked` |
+| 16 | Artifact capabilities works | `GET /artifacts/capabilities` | Returns `supported_request_types` with 4 entries |
+| 17 | Patch artifact generation works | `POST /artifacts/generate` with `generate_patch_artifact` | `result.status == "success"`, `artifact_id` present |
+| 18 | Diff preview generation works | `POST /artifacts/generate` with `generate_diff_preview` | `result.status == "success"`, `artifact_id` present |
+| 19 | Task artifact listing works | `GET /artifacts/task/{task_id}` | Returns array with artifact linked to task |
+| 20 | Artifact file retrieval works | `GET /artifacts/file/{artifact_id}` | Returns artifact file content as plain text |
+| 21 | Artifact audit events present | `GET /audit-logs/` | Contains `artifact_requested`, `artifact_generated` |
 
 ## Quick run
 
@@ -70,4 +76,24 @@ curl -s -X POST http://localhost:8000/execution/github/mutation/ -H 'Content-Typ
 
 # 15. Mutation audit events
 curl -s http://localhost:8000/audit-logs/ | python3 -c "import sys,json; logs=json.load(sys.stdin); types={l['event_type'] for l in logs}; needed={'github_mutation_requested','github_merge_blocked'}; print('PASS' if not needed-types else 'FAIL','- mutation audit events')"
+
+# 16. Artifact capabilities
+curl -s http://localhost:8000/artifacts/capabilities | python3 -c "import sys,json; d=json.load(sys.stdin); print('PASS' if len(d.get('supported_request_types',[]))==4 else 'FAIL','- artifact capabilities')"
+
+# 17. Patch artifact generation
+curl -s -X POST http://localhost:8000/artifacts/generate -H 'Content-Type: application/json' -d '{"request_type":"generate_patch_artifact","title":"reg patch","content":"+ test","context":{"filename":"reg.patch"}}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('PASS' if d.get('result',{}).get('status')=='success' and d.get('artifact_id') else 'FAIL','- patch artifact')"
+
+# 18. Diff preview generation
+curl -s -X POST http://localhost:8000/artifacts/generate -H 'Content-Type: application/json' -d '{"request_type":"generate_diff_preview","title":"reg diff","content":"```diff\n+ line\n```","context":{"filename":"reg-diff.md"}}' | python3 -c "import sys,json; d=json.load(sys.stdin); print('PASS' if d.get('result',{}).get('status')=='success' and d.get('artifact_id') else 'FAIL','- diff preview')"
+
+# 19. Task artifact listing (use task_id from #17)
+TASK_ID=$(curl -s -X POST http://localhost:8000/artifacts/generate -H 'Content-Type: application/json' -d '{"request_type":"generate_patch_artifact","title":"list test","content":"t","context":{"filename":"list.patch"}}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('task_id',''))")
+curl -s "http://localhost:8000/artifacts/task/${TASK_ID}" | python3 -c "import sys,json; d=json.load(sys.stdin); print('PASS' if len(d)>=1 else 'FAIL','- task artifact listing')"
+
+# 20. Artifact file retrieval (use artifact_id from #17)
+ART_ID=$(curl -s -X POST http://localhost:8000/artifacts/generate -H 'Content-Type: application/json' -d '{"request_type":"generate_patch_artifact","title":"file test","content":"file-content-check","context":{"filename":"file.patch"}}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('artifact_id',''))")
+curl -s "http://localhost:8000/artifacts/file/${ART_ID}" | python3 -c "import sys; c=sys.stdin.read(); print('PASS' if 'file-content-check' in c else 'FAIL','- artifact file retrieval')"
+
+# 21. Artifact audit events
+curl -s http://localhost:8000/audit-logs/ | python3 -c "import sys,json; logs=json.load(sys.stdin); types={l['event_type'] for l in logs}; needed={'artifact_requested','artifact_generated'}; print('PASS' if not needed-types else 'FAIL','- artifact audit events')"
 ```

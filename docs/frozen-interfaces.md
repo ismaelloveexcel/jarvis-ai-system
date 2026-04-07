@@ -1,6 +1,6 @@
 # Frozen Interfaces
 
-These API contracts are stable as of Phase 7 (tag phase7-stable).
+These API contracts are stable as of Phase 8 (tag phase8-stable).
 Do NOT change request/response shapes without a migration plan.
 
 ## Endpoints
@@ -35,6 +35,12 @@ Do NOT change request/response shapes without a migration plan.
 - `GET  /execution/github/mutation/capabilities` — mutation config and supported request types
 - `POST /execution/github/mutation/` — submit a mutation request (approval-gated)
 - `GET  /execution/github/mutation/status/{task_id}` — check mutation task status
+
+### Artifacts (Phase 8)
+- `GET  /artifacts/capabilities` — supported artifact request types
+- `POST /artifacts/generate` — generate an artifact (patch, diff preview, change bundle, attachment)
+- `GET  /artifacts/task/{task_id}` — list artifacts linked to a task
+- `GET  /artifacts/file/{artifact_id}` — retrieve artifact file contents
 
 ### Core (Phase 1)
 - `GET  /` — health check
@@ -76,6 +82,14 @@ Do NOT change request/response shapes without a migration plan.
 {"user_id": 1, "conversation_id": null, "request_type": "create_branch|create_patch_artifact|create_pr_draft|execute_repo_write|merge_request", "title": "string", "repo": "string|null", "objective": "string", "context": {}}
 // Response
 {"task_id": 0, "execution_mode": "string", "result": {}}
+```
+
+### POST /artifacts/generate
+```json
+// Request
+{"user_id": 1, "conversation_id": null, "task_id": null, "request_type": "generate_patch_artifact|generate_diff_preview|generate_change_bundle|attach_artifact_to_task", "title": "string", "content": "", "context": {}}
+// Response
+{"task_id": 0, "artifact_id": 0, "result": {}}
 ```
 
 ## Rules
