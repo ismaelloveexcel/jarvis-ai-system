@@ -6,6 +6,8 @@ from app.guardrails.policy import (
     SAFE_WRITE_PREFIXES,
     APPROVAL_REQUIRED_EXECUTION_TYPES,
     ALWAYS_ALLOWED_EXECUTION_TYPES,
+    ALWAYS_ALLOWED_GITHUB_TYPES,
+    APPROVAL_REQUIRED_GITHUB_TYPES,
 )
 
 
@@ -61,4 +63,19 @@ class GuardrailService:
         return GuardrailResult({
             "decision": "blocked",
             "reason": f"Execution type '{request_type}' is not allowed.",
+        })
+
+    def evaluate_github_execution(self, request_type: str, payload: dict) -> GuardrailResult:
+        if request_type in ALWAYS_ALLOWED_GITHUB_TYPES:
+            return GuardrailResult({"decision": "allow"})
+
+        if request_type in APPROVAL_REQUIRED_GITHUB_TYPES:
+            return GuardrailResult({
+                "decision": "approval_required",
+                "reason": f"GitHub request type '{request_type}' requires approval.",
+            })
+
+        return GuardrailResult({
+            "decision": "blocked",
+            "reason": f"GitHub request type '{request_type}' is not allowed.",
         })

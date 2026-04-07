@@ -8,6 +8,7 @@ from app.services.audit_service import AuditService
 from app.services.task_service import TaskService
 from app.services.action_service import ActionService
 from app.services.openhands_service import OpenHandsService
+from app.services.github_execution_service import GitHubExecutionService
 from app.models.task import TaskStatus
 
 router = APIRouter()
@@ -36,6 +37,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
     task_service = TaskService(db)
     action_service = ActionService()
     openhands_service = OpenHandsService()
+    github_service = GitHubExecutionService()
 
     approval = approval_service.get_approval(approval_id)
     if not approval:
@@ -61,6 +63,16 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                 result = openhands_service.run(
                     request_type=request_type,
                     title=task.title,
+                    objective=approval.requested_action.get("objective", ""),
+                    context=approval.requested_action.get("context", {}),
+                )
+            elif approval.action_name.startswith("github:"):
+                request_type = approval.action_name.split("github:", 1)[1]
+                repo = approval.requested_action.get("repo", "unknown/repo")
+                result = github_service.run(
+                    request_type=request_type,
+                    repo=repo,
+                    title=approval.requested_action.get("title", task.title),
                     objective=approval.requested_action.get("objective", ""),
                     context=approval.requested_action.get("context", {}),
                 )

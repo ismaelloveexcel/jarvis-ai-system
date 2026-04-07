@@ -35,3 +35,14 @@ ALWAYS_ALLOWED_EXECUTION_TYPES = {
     "code_generation",
     "bug_fix_plan",
 }
+
+ALWAYS_ALLOWED_GITHUB_TYPES = {
+    "repo_inspect",
+    "branch_plan",
+    "patch_proposal",
+    "pr_draft",
+}
+
+APPROVAL_REQUIRED_GITHUB_TYPES = {
+    "repo_write_request",
+}

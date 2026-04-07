@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import actions, approvals, audit_logs, chat, execution, mcp, memory, tasks
+from app.routers import actions, approvals, audit_logs, chat, execution, github_execution, mcp, memory, tasks
 
 
 @asynccontextmanager
@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.APP_NAME,
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
 )
 
@@ -35,8 +35,9 @@ app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
 app.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit_logs"])
 app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
 app.include_router(execution.router, prefix="/execution", tags=["execution"])
+app.include_router(github_execution.router, prefix="/execution/github", tags=["github_execution"])
 
 
 @app.get("/")
 def root():
-    return {"status": "healthy", "app": settings.APP_NAME, "version": "0.5.0"}
+    return {"status": "healthy", "app": settings.APP_NAME, "version": "0.6.0"}

@@ -18,7 +18,7 @@ type Approval = {
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 5. I can chat, run guarded actions, and submit software execution requests through OpenHands." }
+    { role: "assistant", content: "Hello. I'm Jarvis Phase 6. I can chat, run guarded actions, submit OpenHands execution requests, and handle GitHub workflow requests." }
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -27,6 +27,7 @@ export default function HomePage() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [executionMode, setExecutionMode] = useState<string>("local");
   const [mcpStatus, setMcpStatus] = useState<string>("unknown");
+
   const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
   const loadApprovals = async () => {
@@ -127,6 +128,35 @@ export default function HomePage() {
     }
   };
 
+  const runGitHubExecution = async (requestType: string, title: string, objective: string, context: Record<string, unknown> = {}) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/execution/github/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: 1,
+          conversation_id: conversationId,
+          request_type: requestType,
+          title,
+          repo: "ismaelloveexcel/jarvis-ai-system",
+          objective,
+          context
+        })
+      });
+
+      const data = await res.json();
+      setTaskId(data.task_id ?? null);
+      setExecutionMode(data.execution_mode || "github_readonly");
+      setMessages((prev) => [...prev, { role: "assistant", content: `GitHub [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
+      await loadApprovals();
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: `GitHub ${requestType} failed.` }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const approveItem = async (approvalId: number) => {
     try {
       await fetch(`${apiBase}/approvals/${approvalId}/approve`, {
@@ -198,8 +228,8 @@ export default function HomePage() {
           </div>
 
           <div className="flex gap-2 flex-wrap">
-            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "example/phase5.txt", content: "Hello from Phase 5!\n" + new Date().toISOString() })} disabled={loading}>Safe File Write</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "restricted/p5.txt", content: "Requires approval" })} disabled={loading}>Approval Write</button>
+            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "example/phase6.txt", content: "Hello from Phase 6!\n" + new Date().toISOString() })} disabled={loading}>Safe File Write</button>
+            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "restricted/p6.txt", content: "Requires approval" })} disabled={loading}>Approval Write</button>
             <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://httpbin.org/get" })} disabled={loading}>Allowed HTTP</button>
             <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://google.com" })} disabled={loading}>Blocked HTTP</button>
           </div>
@@ -208,8 +238,14 @@ export default function HomePage() {
             <span className="text-xs text-zinc-500 self-center mr-2">OpenHands:</span>
             <button className="rounded-xl bg-purple-900 border border-purple-700 px-4 py-2 text-sm hover:bg-purple-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("code_generation", "Generate feature module", "Prepare a plan and stub output for a new feature")} disabled={loading}>Code Gen</button>
             <button className="rounded-xl bg-purple-900 border border-purple-700 px-4 py-2 text-sm hover:bg-purple-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("bug_fix_plan", "Bug fix analysis", "Analyze and plan a fix for a sample bug")} disabled={loading}>Bug Fix Plan</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("repo_scaffold", "Scaffold new subsystem", "Prepare a repo scaffold for a new subsystem")} disabled={loading}>Repo Scaffold (approval)</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("file_refactor", "Refactor module", "Refactor a module for better structure")} disabled={loading}>File Refactor (approval)</button>
+          </div>
+
+          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
+            <span className="text-xs text-zinc-500 self-center mr-2">GitHub:</span>
+            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("repo_inspect", "Inspect repo", "Inspect repository structure", { inspection_scope: "root structure" })} disabled={loading}>Repo Inspect</button>
+            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("patch_proposal", "Patch proposal", "Draft a patch proposal for a new route", { branch_name: "feature/patch-proposal", pr_title: "Proposal: add new route" })} disabled={loading}>Patch Proposal</button>
+            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("pr_draft", "Draft PR", "Prepare a draft PR for review")} disabled={loading}>PR Draft</button>
+            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runGitHubExecution("repo_write_request", "Write request", "Prepare a write request for a feature branch", { target_branch: "main", proposed_branch: "feature/github-phase6", requested_changes: ["add workflow", "update docs"] })} disabled={loading}>Write Request (approval)</button>
           </div>
         </div>
       </main>

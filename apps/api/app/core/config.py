@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     OPENHANDS_BASE_URL: str = "http://localhost:3001"
     OPENHANDS_TIMEOUT_SECONDS: int = 60
 
+    GITHUB_EXECUTION_ENABLED: bool = True
+    GITHUB_EXECUTION_MODE: Literal["readonly", "proposal", "approval_required_write"] = "readonly"
+    GITHUB_DEFAULT_REPO: str = ""
+    GITHUB_TOKEN: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
