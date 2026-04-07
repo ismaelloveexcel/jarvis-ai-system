@@ -10,6 +10,7 @@ from app.services.action_service import ActionService
 from app.services.openhands_service import OpenHandsService
 from app.services.github_execution_service import GitHubExecutionService
 from app.services.github_mutation_service import GitHubMutationService
+from app.services.ops_service import OpsService
 from app.models.task import TaskStatus
 
 router = APIRouter()
@@ -40,6 +41,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
     openhands_service = OpenHandsService()
     github_service = GitHubExecutionService()
     github_mutation_service = GitHubMutationService()
+    ops_service = OpsService()
 
     approval = approval_service.get_approval(approval_id)
     if not approval:
@@ -129,6 +131,22 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
             task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
             audit_service.log(
                 event_type="github_completed",
+                event_status="completed",
+                details_json=result,
+                task_id=task.id,
+            )
+
+        elif approval.action_name.startswith("ops:"):
+            request_type = approval.action_name.split("ops:", 1)[1]
+            result = ops_service.run(
+                request_type=request_type,
+                title=approval.requested_action.get("title", task.title),
+                objective=approval.requested_action.get("objective", ""),
+                context=approval.requested_action.get("context", {}),
+            )
+            task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+            audit_service.log(
+                event_type="ops_completed",
                 event_status="completed",
                 details_json=result,
                 task_id=task.id,

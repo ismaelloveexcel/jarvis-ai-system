@@ -18,7 +18,7 @@ type Approval = {
 
 export default function HomePage() {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 9. I can now support safe stub/live GitHub mutation execution while keeping merge blocked by policy." }
+    { role: "assistant", content: "Hello. I'm Jarvis Phase 10. I now support V1 ops/deployment with approval-gated deployment, promotion, rollback, maintenance checks, and runbook lookups." }
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -213,6 +213,35 @@ export default function HomePage() {
     }
   };
 
+  const runOpsRequest = async (requestType: string, title: string, objective: string, environment?: string, context: Record<string, unknown> = {}) => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/ops/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: 1,
+          conversation_id: conversationId,
+          request_type: requestType,
+          title,
+          objective,
+          environment,
+          context
+        })
+      });
+
+      const data = await res.json();
+      setTaskId(data.task_id ?? null);
+      setExecutionMode(data.execution_mode || "ops_stub");
+      setMessages((prev) => [...prev, { role: "assistant", content: `Ops [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
+      await loadApprovals();
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: `Ops ${requestType} failed.` }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const approveItem = async (approvalId: number) => {
     try {
       await fetch(`${apiBase}/approvals/${approvalId}/approve`, {
@@ -315,6 +344,14 @@ export default function HomePage() {
             <span className="text-xs text-zinc-500 self-center mr-2">Artifacts:</span>
             <button className="rounded-xl bg-cyan-900 border border-cyan-700 px-4 py-2 text-sm hover:bg-cyan-800 disabled:opacity-50" onClick={() => generateArtifact("generate_patch_artifact", "Generate patch artifact", "# Patch Artifact\n\n+ add route\n- remove placeholder\n", { filename: "phase8-change.patch" })} disabled={loading}>Patch Artifact</button>
             <button className="rounded-xl bg-cyan-900 border border-cyan-700 px-4 py-2 text-sm hover:bg-cyan-800 disabled:opacity-50" onClick={() => generateArtifact("generate_diff_preview", "Generate diff preview", "# Diff Preview\n\n```diff\n+ add endpoint\n- old placeholder\n```", { filename: "phase8-diff-preview.md" })} disabled={loading}>Diff Preview</button>
+          </div>
+
+          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
+            <span className="text-xs text-zinc-500 self-center mr-2">Ops:</span>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("maintenance_check", "Maintenance check", "Check system health", "staging")} disabled={loading}>Maintenance Check</button>
+            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("runbook_lookup", "Runbook lookup", "Look up general ops runbook", undefined, { runbook_id: "general-ops" })} disabled={loading}>Runbook Lookup</button>
+            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpsRequest("deployment_request", "Deploy to staging", "Deploy latest version to staging", "staging", { version: "0.10.0", artifact_id: 1 })} disabled={loading}>Deploy (approval)</button>
+            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runOpsRequest("rollback_request", "Rollback staging", "Rollback staging to previous version", "staging", { rollback_to_version: "0.9.0" })} disabled={loading}>Rollback (approval)</button>
           </div>
         </div>
       </main>

@@ -10,6 +10,8 @@ from app.guardrails.policy import (
     APPROVAL_REQUIRED_GITHUB_TYPES,
     APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES,
     BLOCKED_GITHUB_MUTATION_TYPES,
+    ALWAYS_ALLOWED_OPS_TYPES,
+    APPROVAL_REQUIRED_OPS_TYPES,
 )
 
 
@@ -98,4 +100,19 @@ class GuardrailService:
         return GuardrailResult({
             "decision": "blocked",
             "reason": f"GitHub mutation '{request_type}' is not allowed.",
+        })
+
+    def evaluate_ops(self, request_type: str, payload: dict) -> GuardrailResult:
+        if request_type in ALWAYS_ALLOWED_OPS_TYPES:
+            return GuardrailResult({"decision": "allow"})
+
+        if request_type in APPROVAL_REQUIRED_OPS_TYPES:
+            return GuardrailResult({
+                "decision": "approval_required",
+                "reason": f"Ops request '{request_type}' requires approval.",
+            })
+
+        return GuardrailResult({
+            "decision": "blocked",
+            "reason": f"Ops request '{request_type}' is not allowed.",
         })

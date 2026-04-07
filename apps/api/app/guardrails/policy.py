@@ -57,3 +57,14 @@ APPROVAL_REQUIRED_GITHUB_MUTATION_TYPES = {
 BLOCKED_GITHUB_MUTATION_TYPES = {
     "merge_request",
 }
+
+ALWAYS_ALLOWED_OPS_TYPES = {
+    "maintenance_check",
+    "runbook_lookup",
+}
+
+APPROVAL_REQUIRED_OPS_TYPES = {
+    "deployment_request",
+    "promote_environment",
+    "rollback_request",
+}
