@@ -1,6 +1,6 @@
 # Frozen Interfaces
 
-These API contracts are stable as of Phase 8 (tag phase8-stable).
+These API contracts are stable as of V1 (tag v1-complete).
 Do NOT change request/response shapes without a migration plan.
 
 ## Endpoints
@@ -36,11 +36,21 @@ Do NOT change request/response shapes without a migration plan.
 - `POST /execution/github/mutation/` — submit a mutation request (approval-gated)
 - `GET  /execution/github/mutation/status/{task_id}` — check mutation task status
 
+### GitHub Mutation Live Status (Phase 9)
+- `GET  /execution/github/mutation/live-status` — live/stub mode, safety config
+
 ### Artifacts (Phase 8)
 - `GET  /artifacts/capabilities` — supported artifact request types
 - `POST /artifacts/generate` — generate an artifact (patch, diff preview, change bundle, attachment)
 - `GET  /artifacts/task/{task_id}` — list artifacts linked to a task
 - `GET  /artifacts/file/{artifact_id}` — retrieve artifact file contents
+
+### Ops (Phase 10)
+- `GET  /ops/capabilities` — ops config and supported request types
+- `GET  /ops/status` — current ops mode and available runbooks
+- `POST /ops/request` — submit an ops request (approval-gated for deployment/promotion/rollback)
+- `GET  /ops/runbooks` — list available runbooks
+- `GET  /ops/task/{task_id}` — check ops task status
 
 ### Core (Phase 1)
 - `GET  /` — health check
@@ -90,6 +100,14 @@ Do NOT change request/response shapes without a migration plan.
 {"user_id": 1, "conversation_id": null, "task_id": null, "request_type": "generate_patch_artifact|generate_diff_preview|generate_change_bundle|attach_artifact_to_task", "title": "string", "content": "", "context": {}}
 // Response
 {"task_id": 0, "artifact_id": 0, "result": {}}
+```
+
+### POST /ops/request
+```json
+// Request
+{"user_id": 1, "conversation_id": null, "request_type": "deployment_request|promote_environment|rollback_request|maintenance_check|runbook_lookup", "title": "string", "environment": "dev|staging|production", "context": {}}
+// Response
+{"task_id": 0, "execution_mode": "string", "result": {}}
 ```
 
 ## Rules

@@ -1,44 +1,67 @@
-# Jarvis Assistant – Phase 5
+# Jarvis Assistant — V1
 
-## What this phase includes
-- Next.js frontend
-- FastAPI backend
-- PostgreSQL
-- LangGraph base flow
-- Persistent tasks + memories
-- Provider-agnostic model interface
-- Action engine with guardrails and approvals
-- MCP config layer with stub providers
-- **OpenHands integration layer (stub mode)**
-- **Execution request routing with task lifecycle**
-- **Audit logging for all execution events**
+A multi-phase AI assistant system with FastAPI backend, Next.js frontend, and PostgreSQL.
+
+## What V1 includes
+
+| Phase | Layer |
+|-------|-------|
+| 1 | Chat UI, FastAPI, PostgreSQL, LangGraph routing, task/memory persistence |
+| 2 | Action engine with registry, guardrails (allow/block/approval_required) |
+| 3 | Approval workflow, audit logging |
+| 4 | MCP config layer with stub providers |
+| 5 | OpenHands execution integration (stub mode) |
+| 6 | GitHub readonly execution workflow |
+| 7 | Approval-gated GitHub mutations (branch, PR draft, patch) |
+| 8 | Artifact generation (patch, diff preview, change bundle) |
+| 9 | Live-safe GitHub mutation execution with repo allowlist |
+| 10 | Ops/deployment layer with approval-gated deploy/promote/rollback |
 
 ## Run locally
 
 ### 1. Prepare env
+```bash
 cp .env.example .env
-
-Then edit `.env` and add your real `LLM_API_KEY`.
+```
+Edit `.env` and add your `LLM_API_KEY`.
 
 ### 2. Start backend + database
+```bash
 docker compose up --build
+```
 
 ### 3. Start frontend
-In a separate terminal:
+```bash
 cd apps/web
 npm install
 npm run dev
+```
 
 ### 4. Open
 http://localhost:3000
 
-## Phase 5 OpenHands endpoints
-- `GET /execution/capabilities` — list supported request types and mode
-- `POST /execution/openhands` — submit an execution request
-- `GET /execution/status/{task_id}` — check execution task status
+## Key endpoints
+
+| Prefix | Purpose |
+|--------|---------|
+| `POST /chat/message` | Conversational interface |
+| `POST /actions/` | Action execution with guardrails |
+| `GET /approvals/` | Pending approval queue |
+| `GET /audit-logs/` | Full audit trail |
+| `POST /execution/openhands` | OpenHands execution requests |
+| `POST /execution/github/` | GitHub execution requests |
+| `POST /execution/github/mutation/` | GitHub mutation requests |
+| `POST /artifacts/generate` | Artifact generation |
+| `POST /ops/request` | Ops/deployment requests |
+| `GET /ops/runbooks` | Runbook listing |
+
+## Safety model
+- All deployment-like actions require human approval
+- Merge is permanently blocked
+- Stub mode is the default for all external integrations
+- Full audit trail for every operation
 
 ## Notes
-- OpenHands runs in stub mode by default. Set `OPENHANDS_MODE=remote` for live runtime.
-- No auth yet.
-- No destructive GitHub actions.
-- No autonomous deployment.
+- No auth yet
+- No autonomous deployment
+- See `docs/v1-closeout.md` for full V1 scope and boundaries

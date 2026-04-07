@@ -55,7 +55,7 @@ def plan_node(state: AgentState):
     if state["route"] == "action":
         state["final_response"] = (
             "Action recognized. Use the /actions endpoint. "
-            "Phase 3 enforces guardrails: actions may be allowed, blocked, or require approval."
+            "Guardrails enforce policy: actions may be allowed, blocked, or require approval."
         )
         return state
 
@@ -63,7 +63,7 @@ def plan_node(state: AgentState):
     memory_context = "\n".join(memory_lines) if memory_lines else "No memory context available."
 
     system_prompt = (
-        "You are Jarvis Assistant Phase 3. "
+        "You are Jarvis Assistant. "
         "Be concise, useful, structured, and execution-oriented. "
         "If asked to perform an action beyond current capabilities, say so clearly."
     )
