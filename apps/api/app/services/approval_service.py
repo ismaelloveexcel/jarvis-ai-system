@@ -39,6 +39,13 @@ class ApprovalService:
         self.db.refresh(approval)
         return approval
 
+    def expire(self, approval: Approval, decision_notes: str | None = None) -> Approval:
+        approval.status = "expired"
+        approval.decision_notes = decision_notes
+        self.db.commit()
+        self.db.refresh(approval)
+        return approval
+
     def reject(self, approval: Approval, decision_notes: str | None = None) -> Approval:
         approval.status = "rejected"
         approval.decision_notes = decision_notes

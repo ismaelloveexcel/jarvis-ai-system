@@ -15,7 +15,7 @@ def get_mcp_status():
         return MCPStatusResponse(**status)
     except Exception as exc:
         logger.exception("get_mcp_status failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/tools", response_model=list[MCPToolInfo])
@@ -25,4 +25,4 @@ def list_mcp_tools():
         return [MCPToolInfo(**tool) for tool in tools]
     except Exception as exc:
         logger.exception("list_mcp_tools failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")

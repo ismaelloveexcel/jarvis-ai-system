@@ -42,7 +42,7 @@ def _get_pending_approval(approval_service: ApprovalService, approval_id: int):
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         if exp < now:
-            approval_service.reject(approval, "Auto-expired: approval window elapsed")
+            approval_service.expire(approval, "Auto-expired: approval window elapsed")
             raise HTTPException(status_code=410, detail="Approval has expired")
     return approval
 
@@ -81,7 +81,7 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
                 task, TaskStatus.FAILED, current_step="failed",
                 result_json={"error": str(exc)},
             )
-            raise HTTPException(status_code=500, detail=str(exc))
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     return _to_response(approval)
 

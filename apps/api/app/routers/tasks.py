@@ -31,7 +31,7 @@ def list_tasks(limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         logger.exception("list_tasks failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/{task_id}", response_model=TaskStatusResponse)
@@ -71,4 +71,4 @@ def create_task(payload: TaskCreateRequest, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         logger.exception("create_task failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")

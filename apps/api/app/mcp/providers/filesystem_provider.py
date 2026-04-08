@@ -24,11 +24,14 @@ class MCPFilesystemAdapter(MCPToolAdapter):
 
         if operation == "list":
             subdir = payload.get("path", "")
-            target = (SAFE_BASE_DIR / subdir).resolve()
-            if not str(target).startswith(str(SAFE_BASE_DIR.resolve())):
+            safe_base = SAFE_BASE_DIR.resolve()
+            target = (safe_base / subdir).resolve()
+            if not target.is_relative_to(safe_base):
                 raise MCPExecutionError("Unsafe path detected")
             if not target.exists():
                 return {"status": "success", "action": "list", "path": str(target), "entries": []}
+            if not target.is_dir():
+                raise MCPExecutionError(f"Path is not a directory: {target}")
             entries = []
             for item in sorted(target.iterdir()):
                 entries.append({

@@ -28,6 +28,9 @@ def _execute_openhands_background(task_id: int, request_type: str, title: str, o
         openhands_service = OpenHandsService()
 
         task = task_service.get_task(task_id)
+        if not task:
+            logger.error("Background openhands execution: task %s not found", task_id)
+            return
         task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing execution")
         task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning execution")
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing with OpenHands")

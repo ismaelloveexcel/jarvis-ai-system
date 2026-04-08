@@ -29,6 +29,9 @@ def _execute_github_background(task_id: int, request_type: str, repo: str, title
         github_service = GitHubExecutionService()
 
         task = task_service.get_task(task_id)
+        if not task:
+            logger.error("Background github execution: task %s not found", task_id)
+            return
         task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing github request")
         task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning github workflow")
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing github workflow")

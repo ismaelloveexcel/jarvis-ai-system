@@ -113,7 +113,7 @@ def generate_artifact(payload: ArtifactGenerateRequest, db: Session = Depends(ge
             details_json={"error": str(exc)},
             task_id=task.id,
         )
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/task/{task_id}", response_model=list[TaskArtifactResponse])

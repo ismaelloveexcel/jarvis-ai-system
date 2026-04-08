@@ -1,5 +1,9 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 from app.models.task import Task, TaskStatus
+
+_TERMINAL_STATUSES = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
 
 
 class TaskService:
@@ -34,6 +38,8 @@ class TaskService:
             task.current_step = current_step
         if result_json is not None:
             task.result_json = result_json
+        if status in _TERMINAL_STATUSES and task.completed_at is None:
+            task.completed_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(task)
         return task

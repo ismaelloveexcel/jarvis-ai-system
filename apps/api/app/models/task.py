@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
 
 from app.models.base import Base, MutableTimestampMixin
 
@@ -30,5 +31,5 @@ class Task(MutableTimestampMixin, Base):
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
     context_json: Mapped[dict] = mapped_column(JSON, default=dict)
     result_json: Mapped[dict] = mapped_column(JSON, default=dict)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -29,7 +29,7 @@ def list_memories(user_id: int = 1, memory_type: str | None = None, limit: int =
         raise
     except Exception as exc:
         logger.exception("list_memories failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/", response_model=MemoryResponse)
@@ -54,7 +54,7 @@ def create_memory(payload: MemoryCreateRequest, db: Session = Depends(get_db)):
         raise
     except Exception as exc:
         logger.exception("create_memory failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def _memory_to_response(m) -> MemoryResponse:

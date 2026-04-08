@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from sqlalchemy import text
 
@@ -32,15 +33,22 @@ async def lifespan(app: FastAPI):
 
 _auth = [Depends(require_api_key)]
 
+# When an API key is required, disable interactive docs to prevent unauthenticated access
+_protected = bool(settings.API_KEY)
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="0.10.0",
     lifespan=lifespan,
+    docs_url=None if _protected else "/docs",
+    redoc_url=None if _protected else "/redoc",
+    openapi_url=None if _protected else "/openapi.json",
 )
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -65,13 +73,16 @@ app.include_router(ops.router, prefix="/ops", tags=["ops"], dependencies=_auth)
 
 
 def _check_db() -> bool:
+    db = None
     try:
         db = SessionLocal()
         db.execute(text("SELECT 1"))
-        db.close()
         return True
     except Exception:
         return False
+    finally:
+        if db is not None:
+            db.close()
 
 
 @app.get("/")

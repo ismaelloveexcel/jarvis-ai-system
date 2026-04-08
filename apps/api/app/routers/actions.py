@@ -108,4 +108,4 @@ def run_action(payload: ActionRequest, db: Session = Depends(get_db)):
             details_json={"action_name": payload.action_name, "error": str(exc)},
             task_id=task.id,
         )
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -24,6 +24,9 @@ def _execute_ops_background(task_id: int, request_type: str, title: str, environ
         ops_service = OpsService()
 
         task = task_service.get_task(task_id)
+        if not task:
+            logger.error("Background ops execution: task %s not found", task_id)
+            return
         task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing ops request")
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing ops request")
 

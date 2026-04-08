@@ -101,5 +101,5 @@ python -m pytest tests/ -v
 ## Notes
 - Live providers remain disabled — all external integrations run in stub mode
 - No user auth / RBAC — API key auth only
-- No background workers — all execution is synchronous
+- No background workers — `/execution/*`, `/execution/github/*`, and `/ops/request` queue work via FastAPI `BackgroundTasks` and return 202 (in-process async, not a separate worker queue)
 - See `docs/v1-closeout.md` for full V1 scope and boundaries

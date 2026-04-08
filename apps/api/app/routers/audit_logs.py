@@ -30,4 +30,4 @@ def list_audit_logs(event_type: str | None = None, limit: int = 50, offset: int 
         raise
     except Exception as exc:
         logger.exception("list_audit_logs failed")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Internal server error")
