@@ -1,15 +1,32 @@
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from sqlalchemy import text
 
+from app.core.auth import require_api_key
 from app.core.config import settings
-from app.routers import actions, approvals, artifacts, audit_logs, chat, execution, github_execution, github_mutation, mcp, memory, ops, tasks
+from app.core.logging import RequestIdMiddleware, setup_logging
+from app.db.session import SessionLocal
+from app.routers import (
+    actions, approvals, artifacts, audit_logs, chat,
+    execution, github_execution, github_mutation, mcp, memory, ops, tasks,
+)
+
+logger = logging.getLogger("jarvis")
+
+limiter = Limiter(key_func=get_remote_address, default_limits=[settings.RATE_LIMIT])
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print(f"🚀 Starting {settings.APP_NAME} in {settings.APP_ENV}")
+    setup_logging()
+    logger.info("starting", extra={"app": settings.APP_NAME, "env": settings.APP_ENV})
     yield
 
 
@@ -17,8 +34,13 @@ app = FastAPI(
     title=settings.APP_NAME,
     version="0.10.0",
     lifespan=lifespan,
+    dependencies=[Depends(require_api_key)],
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -41,6 +63,40 @@ app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
 app.include_router(ops.router, prefix="/ops", tags=["ops"])
 
 
-@app.get("/")
+def _check_db() -> bool:
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        return True
+    except Exception:
+        return False
+
+
+@app.get("/", dependencies=[])
+@limiter.exempt
 def root():
-    return {"status": "healthy", "app": settings.APP_NAME, "version": "0.10.0"}
+    db_ok = _check_db()
+    status = "healthy" if db_ok else "degraded"
+    code = 200 if db_ok else 503
+    return JSONResponse(
+        status_code=code,
+        content={
+            "status": status,
+            "app": settings.APP_NAME,
+            "version": "0.10.0",
+            "database": "connected" if db_ok else "unavailable",
+        },
+    )
+
+
+@app.get("/health", dependencies=[])
+@limiter.exempt
+def health():
+    db_ok = _check_db()
+    status = "healthy" if db_ok else "unhealthy"
+    code = 200 if db_ok else 503
+    return JSONResponse(
+        status_code=code,
+        content={"status": status, "database": "connected" if db_ok else "unavailable"},
+    )

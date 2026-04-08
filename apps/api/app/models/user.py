@@ -1,9 +1,10 @@
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+
+from app.models.base import Base, MutableTimestampMixin
 
 
-class User(Base):
+class User(MutableTimestampMixin, Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

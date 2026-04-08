@@ -1,9 +1,10 @@
 from sqlalchemy import ForeignKey, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+
+from app.models.base import Base, TimestampMixin
 
 
-class TaskArtifact(Base):
+class TaskArtifact(TimestampMixin, Base):
     __tablename__ = "task_artifacts"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
