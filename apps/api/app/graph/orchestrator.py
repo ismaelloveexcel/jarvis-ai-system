@@ -2,7 +2,7 @@ from typing import Annotated, Optional, TypedDict
 from operator import add
 
 from langgraph.graph import END, StateGraph
-from app.core.llm import call_llm
+from app.core.llm import call_llm, classify_intent
 
 
 class AgentState(TypedDict):
@@ -19,29 +19,19 @@ def intake_node(state: AgentState):
 
 
 def enrich_context_node(state: AgentState):
+    memory_snippets = state.get("context", {}).get("memory_snippets", [])
+    if memory_snippets:
+        state["context"]["enriched"] = True
+        state["context"]["memory_summary"] = "; ".join(memory_snippets[:5])
+    else:
+        state["context"]["enriched"] = False
+        state["context"]["memory_summary"] = ""
     return state
 
 
 def classify_node(state: AgentState):
-    user_text = state["messages"][-1]["content"].lower()
-
-    action_keywords = [
-        "create file", "write file", "make file",
-        "fetch url", "call api", "http get",
-        "github repo", "repo info",
-    ]
-    task_keywords = [
-        "build", "create app", "generate plan",
-        "set up", "implement", "design system",
-    ]
-
-    if any(k in user_text for k in action_keywords):
-        state["route"] = "action"
-    elif any(k in user_text for k in task_keywords):
-        state["route"] = "task"
-    else:
-        state["route"] = "chat"
-
+    user_text = state["messages"][-1]["content"]
+    state["route"] = classify_intent(user_text)
     return state
 
 

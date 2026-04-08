@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import get_db, get_background_db
 from app.schemas.ops import OpsRequest, OpsResponse, OpsCapabilitiesResponse, RunbookResponse
 from app.services.task_service import TaskService
 from app.services.approval_service import ApprovalService
@@ -11,6 +13,42 @@ from app.guardrails.service import GuardrailService
 from app.models.task import TaskStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _execute_ops_background(task_id: int, request_type: str, title: str, environment: str, context: dict):
+    db = get_background_db()
+    try:
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        ops_service = OpsService()
+
+        task = task_service.get_task(task_id)
+        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing ops request")
+        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing ops request")
+
+        result = ops_service.run(
+            request_type=request_type, title=title, environment=environment, context=context,
+        )
+
+        task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+        audit_service.log(
+            event_type="ops_completed", event_status="completed",
+            details_json=result, task_id=task.id,
+        )
+    except Exception as exc:
+        logger.exception("Background ops execution failed for task %s", task_id)
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        task = task_service.get_task(task_id)
+        if task:
+            task_service.update_task_status(task, TaskStatus.FAILED, current_step="failed", result_json={"error": str(exc)})
+            audit_service.log(
+                event_type="ops_failed", event_status="failed",
+                details_json={"error": str(exc)}, task_id=task.id,
+            )
+    finally:
+        db.close()
 
 
 @router.get("/capabilities", response_model=OpsCapabilitiesResponse)
@@ -51,8 +89,8 @@ def ops_task_status(task_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/request", response_model=OpsResponse)
-def ops_request(payload: OpsRequest, db: Session = Depends(get_db)):
+@router.post("/request", response_model=OpsResponse, status_code=202)
+def ops_request(payload: OpsRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     task_service = TaskService(db)
     approval_service = ApprovalService(db)
     audit_service = AuditService(db)
@@ -140,52 +178,19 @@ def ops_request(payload: OpsRequest, db: Session = Depends(get_db)):
             },
         )
 
-    try:
-        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing ops request")
-        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing ops request")
+    task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="queued for execution")
 
-        result = ops_service.run(
-            request_type=payload.request_type,
-            title=payload.title,
-            environment=payload.environment,
-            context=payload.context,
-        )
+    background_tasks.add_task(
+        _execute_ops_background,
+        task_id=task.id,
+        request_type=payload.request_type,
+        title=payload.title,
+        environment=payload.environment,
+        context=payload.context,
+    )
 
-        task_service.update_task_status(
-            task,
-            TaskStatus.COMPLETED,
-            current_step="completed",
-            result_json=result,
-        )
-
-        audit_service.log(
-            event_type="ops_completed",
-            event_status="completed",
-            details_json=result,
-            task_id=task.id,
-        )
-
-        return OpsResponse(
-            task_id=task.id,
-            execution_mode=result.get("execution_mode", "ops_stub"),
-            result=result,
-        )
-
-    except Exception as exc:
-        task_service.update_task_status(
-            task,
-            TaskStatus.FAILED,
-            current_step="failed",
-            result_json={"error": str(exc)},
-        )
-        audit_service.log(
-            event_type="ops_failed",
-            event_status="failed",
-            details_json={"error": str(exc)},
-            task_id=task.id,
-        )
-        return OpsResponse(
-            task_id=task.id,
-            execution_mode="failed",
-            result={"status": "failed", "error": str(exc)},
-        )
+    return OpsResponse(
+        task_id=task.id,
+        execution_mode="async",
+        result={"status": "accepted", "message": "Task queued for background execution"},
+    )

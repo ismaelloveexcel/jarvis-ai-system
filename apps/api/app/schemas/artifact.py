@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Literal
 
 
 class ArtifactGenerateRequest(BaseModel):
-    user_id: int = 1
+    user_id: int = Field(default=1, ge=1)
     conversation_id: int | None = None
     task_id: int | None = None
     request_type: Literal["generate_patch_artifact", "generate_diff_preview", "generate_change_bundle", "attach_artifact_to_task"]
-    title: str
+    title: str = Field(..., min_length=1, max_length=500)
     content: str = ""
     context: dict[str, Any] = {}
 

@@ -1,7 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -30,11 +30,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
+_auth = [Depends(require_api_key)]
+
 app = FastAPI(
     title=settings.APP_NAME,
     version="0.10.0",
     lifespan=lifespan,
-    dependencies=[Depends(require_api_key)],
 )
 
 app.state.limiter = limiter
@@ -49,18 +50,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(chat.router, prefix="/chat", tags=["chat"])
-app.include_router(tasks.router, prefix="/tasks", tags=["tasks"])
-app.include_router(memory.router, prefix="/memory", tags=["memory"])
-app.include_router(actions.router, prefix="/actions", tags=["actions"])
-app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
-app.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit_logs"])
-app.include_router(mcp.router, prefix="/mcp", tags=["mcp"])
-app.include_router(execution.router, prefix="/execution", tags=["execution"])
-app.include_router(github_execution.router, prefix="/execution/github", tags=["github_execution"])
-app.include_router(github_mutation.router, prefix="/execution/github/mutation", tags=["github_mutation"])
-app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"])
-app.include_router(ops.router, prefix="/ops", tags=["ops"])
+app.include_router(chat.router, prefix="/chat", tags=["chat"], dependencies=_auth)
+app.include_router(tasks.router, prefix="/tasks", tags=["tasks"], dependencies=_auth)
+app.include_router(memory.router, prefix="/memory", tags=["memory"], dependencies=_auth)
+app.include_router(actions.router, prefix="/actions", tags=["actions"], dependencies=_auth)
+app.include_router(approvals.router, prefix="/approvals", tags=["approvals"], dependencies=_auth)
+app.include_router(audit_logs.router, prefix="/audit-logs", tags=["audit_logs"], dependencies=_auth)
+app.include_router(mcp.router, prefix="/mcp", tags=["mcp"], dependencies=_auth)
+app.include_router(execution.router, prefix="/execution", tags=["execution"], dependencies=_auth)
+app.include_router(github_execution.router, prefix="/execution/github", tags=["github_execution"], dependencies=_auth)
+app.include_router(github_mutation.router, prefix="/execution/github/mutation", tags=["github_mutation"], dependencies=_auth)
+app.include_router(artifacts.router, prefix="/artifacts", tags=["artifacts"], dependencies=_auth)
+app.include_router(ops.router, prefix="/ops", tags=["ops"], dependencies=_auth)
 
 
 def _check_db() -> bool:
@@ -73,7 +74,7 @@ def _check_db() -> bool:
         return False
 
 
-@app.get("/", dependencies=[])
+@app.get("/")
 @limiter.exempt
 def root():
     db_ok = _check_db()
@@ -90,7 +91,7 @@ def root():
     )
 
 
-@app.get("/health", dependencies=[])
+@app.get("/health")
 @limiter.exempt
 def health():
     db_ok = _check_db()

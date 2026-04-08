@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -7,3 +9,4 @@ class AuditLogResponse(BaseModel):
     event_type: str
     event_status: str
     details_json: dict
+    created_at: datetime | None = None

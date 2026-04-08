@@ -1,3 +1,7 @@
+from datetime import datetime, timezone
+
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -10,6 +14,7 @@ from app.services.approval_dispatcher import dispatch_approved_action
 from app.models.task import TaskStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _to_response(approval) -> ApprovalResponse:
@@ -20,6 +25,7 @@ def _to_response(approval) -> ApprovalResponse:
         requested_action=approval.requested_action or {},
         status=approval.status,
         decision_notes=approval.decision_notes,
+        expires_at=approval.expires_at,
     )
 
 
@@ -29,12 +35,21 @@ def _get_pending_approval(approval_service: ApprovalService, approval_id: int):
         raise HTTPException(status_code=404, detail="Approval not found")
     if approval.status != "pending":
         raise HTTPException(status_code=400, detail="Approval is no longer pending")
+    if approval.expires_at:
+        exp = approval.expires_at
+        now = datetime.now(timezone.utc)
+        # Handle naive datetimes (e.g., from SQLite in tests)
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < now:
+            approval_service.reject(approval, "Auto-expired: approval window elapsed")
+            raise HTTPException(status_code=410, detail="Approval has expired")
     return approval
 
 
 @router.get("/", response_model=list[ApprovalResponse])
-def list_approvals(db: Session = Depends(get_db)):
-    approvals = ApprovalService(db).list_approvals()
+def list_approvals(status: str | None = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    approvals = ApprovalService(db).list_approvals(status=status, limit=limit, offset=offset)
     return [_to_response(a) for a in approvals]
 
 
@@ -57,8 +72,16 @@ def approve_approval(approval_id: int, payload: ApprovalDecisionRequest, db: Ses
     task = task_service.get_task(approval.task_id)
     if task:
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing after approval")
-        result = dispatch_approved_action(approval, task, audit_service)
-        task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+        try:
+            result = dispatch_approved_action(approval, task, audit_service)
+            task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+        except Exception as exc:
+            logger.exception("dispatch_approved_action failed for approval %s", approval.id)
+            task_service.update_task_status(
+                task, TaskStatus.FAILED, current_step="failed",
+                result_json={"error": str(exc)},
+            )
+            raise HTTPException(status_code=500, detail=str(exc))
 
     return _to_response(approval)
 

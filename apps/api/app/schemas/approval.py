@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -8,6 +10,7 @@ class ApprovalResponse(BaseModel):
     requested_action: dict
     status: str
     decision_notes: str | None = None
+    expires_at: datetime | None = None
 
 
 class ApprovalDecisionRequest(BaseModel):

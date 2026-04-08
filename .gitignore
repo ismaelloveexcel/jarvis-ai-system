@@ -14,6 +14,7 @@ env/
 .coverage
 coverage.xml
 htmlcov/
+*.db
 
 # Env
 .env

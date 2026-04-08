@@ -113,16 +113,12 @@ def generate_artifact(payload: ArtifactGenerateRequest, db: Session = Depends(ge
             details_json={"error": str(exc)},
             task_id=task.id,
         )
-        return ArtifactResponse(
-            task_id=task.id,
-            artifact_id=None,
-            result={"status": "failed", "error": str(exc)},
-        )
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/task/{task_id}", response_model=list[TaskArtifactResponse])
-def list_task_artifacts(task_id: int, db: Session = Depends(get_db)):
-    artifacts = ArtifactService(db).list_task_artifacts(task_id)
+def list_task_artifacts(task_id: int, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    artifacts = ArtifactService(db).list_task_artifacts(task_id, limit=limit, offset=offset)
     return [
         TaskArtifactResponse(
             id=a.id,

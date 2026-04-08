@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.session import get_db
+from app.db.session import get_db, get_background_db
 from app.schemas.github_execution import (
     GitHubExecutionRequest,
     GitHubExecutionResponse,
@@ -16,6 +18,43 @@ from app.guardrails.service import GuardrailService
 from app.models.task import TaskStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _execute_github_background(task_id: int, request_type: str, repo: str, title: str, objective: str, context: dict):
+    db = get_background_db()
+    try:
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        github_service = GitHubExecutionService()
+
+        task = task_service.get_task(task_id)
+        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing github request")
+        task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning github workflow")
+        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing github workflow")
+
+        result = github_service.run(
+            request_type=request_type, repo=repo, title=title, objective=objective, context=context,
+        )
+
+        task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+        audit_service.log(
+            event_type="github_completed", event_status="completed",
+            details_json=result, task_id=task.id,
+        )
+    except Exception as exc:
+        logger.exception("Background github execution failed for task %s", task_id)
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        task = task_service.get_task(task_id)
+        if task:
+            task_service.update_task_status(task, TaskStatus.FAILED, current_step="failed", result_json={"error": str(exc)})
+            audit_service.log(
+                event_type="github_failed", event_status="failed",
+                details_json={"error": str(exc)}, task_id=task.id,
+            )
+    finally:
+        db.close()
 
 
 @router.get("/capabilities", response_model=GitHubCapabilityResponse)
@@ -38,8 +77,8 @@ def github_status(task_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/", response_model=GitHubExecutionResponse)
-def run_github_execution(payload: GitHubExecutionRequest, db: Session = Depends(get_db)):
+@router.post("/", response_model=GitHubExecutionResponse, status_code=202)
+def run_github_execution(payload: GitHubExecutionRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     task_service = TaskService(db)
     approval_service = ApprovalService(db)
     audit_service = AuditService(db)
@@ -134,54 +173,20 @@ def run_github_execution(payload: GitHubExecutionRequest, db: Session = Depends(
             },
         )
 
-    try:
-        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing github request")
-        task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning github workflow")
-        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing github workflow")
+    task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="queued for execution")
 
-        result = github_service.run(
-            request_type=payload.request_type,
-            repo=repo,
-            title=payload.title,
-            objective=payload.objective,
-            context=payload.context,
-        )
+    background_tasks.add_task(
+        _execute_github_background,
+        task_id=task.id,
+        request_type=payload.request_type,
+        repo=repo,
+        title=payload.title,
+        objective=payload.objective,
+        context=payload.context,
+    )
 
-        task_service.update_task_status(
-            task,
-            TaskStatus.COMPLETED,
-            current_step="completed",
-            result_json=result,
-        )
-
-        audit_service.log(
-            event_type="github_completed",
-            event_status="completed",
-            details_json=result,
-            task_id=task.id,
-        )
-
-        return GitHubExecutionResponse(
-            task_id=task.id,
-            execution_mode=result.get("execution_mode", "github_readonly"),
-            result=result,
-        )
-
-    except Exception as exc:
-        task_service.update_task_status(
-            task,
-            TaskStatus.FAILED,
-            current_step="failed",
-            result_json={"error": str(exc)},
-        )
-        audit_service.log(
-            event_type="github_failed",
-            event_status="failed",
-            details_json={"error": str(exc)},
-            task_id=task.id,
-        )
-        return GitHubExecutionResponse(
-            task_id=task.id,
-            execution_mode="failed",
-            result={"status": "failed", "error": str(exc)},
-        )
+    return GitHubExecutionResponse(
+        task_id=task.id,
+        execution_mode="async",
+        result={"status": "accepted", "message": "Task queued for background execution"},
+    )

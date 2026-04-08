@@ -21,6 +21,23 @@ class GuardrailResult(dict):
 
 
 class GuardrailService:
+    def _validate_http_payload(self, payload: dict) -> GuardrailResult | None:
+        url = payload.get("url", "")
+        if not url:
+            return GuardrailResult({"decision": "blocked", "reason": "Missing 'url' in payload."})
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return GuardrailResult({"decision": "blocked", "reason": f"Invalid URL scheme: {parsed.scheme}"})
+        return None
+
+    def _validate_file_payload(self, payload: dict) -> GuardrailResult | None:
+        path = payload.get("relative_path", "")
+        if not path:
+            return GuardrailResult({"decision": "blocked", "reason": "Missing 'relative_path' in payload."})
+        if ".." in path:
+            return GuardrailResult({"decision": "blocked", "reason": "Path traversal detected in 'relative_path'."})
+        return None
+
     def evaluate(self, action_name: str, payload: dict) -> GuardrailResult:
         if action_name in BLOCKED_ACTIONS:
             return GuardrailResult({
@@ -32,6 +49,9 @@ class GuardrailService:
             return GuardrailResult({"decision": "allow"})
 
         if action_name == "http_request":
+            validation_error = self._validate_http_payload(payload)
+            if validation_error:
+                return validation_error
             url = payload.get("url", "")
             hostname = urlparse(url).hostname or ""
             if hostname not in ALLOWED_HTTP_HOSTS:
@@ -42,6 +62,9 @@ class GuardrailService:
             return GuardrailResult({"decision": "allow"})
 
         if action_name == "create_file":
+            validation_error = self._validate_file_payload(payload)
+            if validation_error:
+                return validation_error
             relative_path = payload.get("relative_path", "")
             if not any(relative_path.startswith(prefix) for prefix in SAFE_WRITE_PREFIXES):
                 return GuardrailResult({

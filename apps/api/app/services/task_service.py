@@ -22,8 +22,8 @@ class TaskService:
         self.db.refresh(task)
         return task
 
-    def list_tasks(self) -> list[Task]:
-        return self.db.query(Task).order_by(Task.id.desc()).all()
+    def list_tasks(self, limit: int = 50, offset: int = 0) -> list[Task]:
+        return self.db.query(Task).order_by(Task.id.desc()).offset(offset).limit(limit).all()
 
     def get_task(self, task_id: int) -> Task | None:
         return self.db.query(Task).filter(Task.id == task_id).first()

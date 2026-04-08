@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -108,5 +108,4 @@ def run_action(payload: ActionRequest, db: Session = Depends(get_db)):
             details_json={"action_name": payload.action_name, "error": str(exc)},
             task_id=task.id,
         )
-        return ActionResponse(task_id=task.id, action_name=payload.action_name,
-                              result={"status": "failed", "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc))

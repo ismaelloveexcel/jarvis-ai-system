@@ -1,4 +1,6 @@
-from sqlalchemy import ForeignKey, JSON, String, Text
+from datetime import datetime
+
+from sqlalchemy import ForeignKey, JSON, String, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, MutableTimestampMixin
@@ -13,3 +15,4 @@ class Approval(MutableTimestampMixin, Base):
     requested_action: Mapped[dict] = mapped_column(JSON, default=dict)
     status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
     decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
