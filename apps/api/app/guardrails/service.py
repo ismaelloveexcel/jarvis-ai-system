@@ -1,3 +1,5 @@
+import json
+import logging
 from urllib.parse import urlparse
 from app.guardrails.policy import (
     ALLOWED_HTTP_HOSTS,
@@ -21,6 +23,54 @@ class GuardrailResult(dict):
 
 
 class GuardrailService:
+    def __init__(self):
+        self.logger = logging.getLogger("jarvis.guardrails")
+        self.MAX_PAYLOAD_SIZE = 1_048_576  # 1MB
+        self.MAX_CONTEXT_SIZE = 65_536  # 64KB
+
+    def _check_payload_size(self, payload: dict, context: dict | None = None) -> GuardrailResult | None:
+        """
+        Check if payload and context objects exceed size limits.
+        Returns GuardrailResult with blocked decision if limit exceeded, None otherwise.
+        """
+        payload_size = len(json.dumps(payload).encode('utf-8'))
+        total_size = payload_size
+
+        if payload_size > self.MAX_PAYLOAD_SIZE:
+            self.logger.warning(
+                "security_event",
+                extra={
+                    "event_type": "payload_size_exceeded",
+                    "payload_size_bytes": payload_size,
+                    "max_allowed": self.MAX_PAYLOAD_SIZE,
+                    "exceeded_by_bytes": payload_size - self.MAX_PAYLOAD_SIZE,
+                }
+            )
+            return GuardrailResult({
+                "decision": "blocked",
+                "reason": f"Payload size {payload_size} bytes exceeds maximum of {self.MAX_PAYLOAD_SIZE} bytes (1MB)."
+            })
+
+        if context is not None:
+            context_size = len(json.dumps(context).encode('utf-8'))
+            total_size += context_size
+            if context_size > self.MAX_CONTEXT_SIZE:
+                self.logger.warning(
+                    "security_event",
+                    extra={
+                        "event_type": "context_size_exceeded",
+                        "context_size_bytes": context_size,
+                        "max_allowed": self.MAX_CONTEXT_SIZE,
+                        "exceeded_by_bytes": context_size - self.MAX_CONTEXT_SIZE,
+                    }
+                )
+                return GuardrailResult({
+                    "decision": "blocked",
+                    "reason": f"Context size {context_size} bytes exceeds maximum of {self.MAX_CONTEXT_SIZE} bytes (64KB)."
+                })
+
+        return None
+
     def _validate_http_payload(self, payload: dict) -> GuardrailResult | None:
         url = payload.get("url", "")
         if not url:
@@ -39,6 +89,11 @@ class GuardrailService:
         return None
 
     def evaluate(self, action_name: str, payload: dict) -> GuardrailResult:
+        # Check payload size first before any other policy evaluation
+        size_check = self._check_payload_size(payload)
+        if size_check:
+            return size_check
+
         if action_name in BLOCKED_ACTIONS:
             return GuardrailResult({
                 "decision": "blocked",
@@ -81,6 +136,11 @@ class GuardrailService:
         })
 
     def evaluate_execution(self, request_type: str, payload: dict) -> GuardrailResult:
+        # Check payload size first before any other policy evaluation
+        size_check = self._check_payload_size(payload)
+        if size_check:
+            return size_check
+
         if request_type in ALWAYS_ALLOWED_EXECUTION_TYPES:
             return GuardrailResult({"decision": "allow"})
 
@@ -96,6 +156,11 @@ class GuardrailService:
         })
 
     def evaluate_github_execution(self, request_type: str, payload: dict) -> GuardrailResult:
+        # Check payload size first before any other policy evaluation
+        size_check = self._check_payload_size(payload)
+        if size_check:
+            return size_check
+
         if request_type in ALWAYS_ALLOWED_GITHUB_TYPES:
             return GuardrailResult({"decision": "allow"})
 
@@ -111,6 +176,11 @@ class GuardrailService:
         })
 
     def evaluate_github_mutation(self, request_type: str, payload: dict) -> GuardrailResult:
+        # Check payload size first before any other policy evaluation
+        size_check = self._check_payload_size(payload)
+        if size_check:
+            return size_check
+
         if request_type in BLOCKED_GITHUB_MUTATION_TYPES:
             return GuardrailResult({
                 "decision": "blocked",
@@ -129,6 +199,11 @@ class GuardrailService:
         })
 
     def evaluate_ops(self, request_type: str, payload: dict) -> GuardrailResult:
+        # Check payload size first before any other policy evaluation
+        size_check = self._check_payload_size(payload)
+        if size_check:
+            return size_check
+
         if request_type in ALWAYS_ALLOWED_OPS_TYPES:
             return GuardrailResult({"decision": "allow"})
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import RightPanel from "@/components/RightPanel";
+import ApprovalDetail from "@/components/ApprovalDetail";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -13,44 +14,136 @@ type Approval = {
   id: number;
   task_id: number;
   action_name: string;
+  requested_action: Record<string, unknown>;
   status: string;
+  decision_notes?: string;
+  expires_at?: string;
+  approved_by?: number;
+  approved_at?: string;
+};
+
+type ActionCard = {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  onRun: () => Promise<void>;
 };
 
 export default function HomePage() {
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hello. I'm Jarvis Phase 10. I now include the V1 ops/deployment layer with approval-gated deployment, promotion, rollback, and maintenance/runbook support." }
+    {
+      role: "assistant",
+      content:
+        "Welcome. Describe what you want done and I will run the safest path first, then ask for approval when needed.",
+    },
   ]);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [taskId, setTaskId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [executionMode, setExecutionMode] = useState<string>("local");
-  const [mcpStatus, setMcpStatus] = useState<string>("unknown");
+  const [selectedApproval, setSelectedApproval] = useState<Approval | null>(null);
+  const [executionMode, setExecutionMode] = useState("idle");
+  const [mcpStatus, setMcpStatus] = useState("checking");
+  const [healthStatus, setHealthStatus] = useState("checking");
+  const [apiKey, setApiKey] = useState("");
+  const [showSettings, setShowSettings] = useState(false);
+  const [apiProtected, setApiProtected] = useState(false);
 
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+  useEffect(() => {
+    const stored = window.localStorage.getItem("jarvis_api_key") || "";
+    setApiKey(stored);
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("jarvis_api_key", apiKey);
+  }, [apiKey]);
+
+  const request = async (path: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers || {});
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    if (apiKey.trim()) {
+      headers.set("X-API-Key", apiKey.trim());
+    }
+
+    const response = await fetch(`${apiBase}${path}`, { ...init, headers });
+    const text = await response.text();
+    let data: unknown = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { detail: text };
+      }
+    }
+
+    if (response.status === 401) {
+      setApiProtected(true);
+      throw new Error("API key missing or invalid. Add it in Connection Settings.");
+    }
+
+    if (!response.ok) {
+      const detail = typeof data === "object" && data && "detail" in data ? String((data as { detail: unknown }).detail) : `Request failed (${response.status})`;
+      throw new Error(detail);
+    }
+
+    return data;
+  };
+
+  const addAssistantMessage = (content: string) => {
+    setMessages((prev) => [...prev, { role: "assistant", content }]);
+  };
 
   const loadApprovals = async () => {
     try {
-      const res = await fetch(`${apiBase}/approvals/`);
-      const data = await res.json();
-      setApprovals(data.filter((a: Approval) => a.status === "pending"));
-    } catch { /* ignore */ }
+      const data = await request("/approvals/");
+      const pending = Array.isArray(data) ? (data as Approval[]) : [];
+      setApprovals(pending.filter((approval) => approval.status === "pending"));
+      setApiProtected(false);
+    } catch (error) {
+      setApprovals([]);
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
+    }
   };
 
   const loadMcpStatus = async () => {
     try {
-      const res = await fetch(`${apiBase}/mcp/status`);
-      const data = await res.json();
-      setMcpStatus(data.enabled ? `enabled (${data.default_mode})` : "disabled");
+      const data = (await request("/mcp/status")) as Record<string, unknown>;
+      const enabled = Boolean(data.enabled);
+      const mode = String(data.default_mode || "local");
+      setMcpStatus(enabled ? `enabled (${mode})` : "disabled");
     } catch {
       setMcpStatus("unavailable");
     }
   };
 
+  const loadHealth = async () => {
+    try {
+      const response = await fetch(`${apiBase}/health`);
+      const data = await response.json();
+      setHealthStatus(String(data.status || "unknown"));
+    } catch {
+      setHealthStatus("unreachable");
+    }
+  };
+
   useEffect(() => {
-    loadApprovals();
+    loadHealth();
     loadMcpStatus();
+    loadApprovals();
+
+    const refreshInterval = window.setInterval(() => {
+      loadHealth();
+      loadApprovals();
+    }, 15000);
+
+    return () => window.clearInterval(refreshInterval);
   }, []);
 
   const sendMessage = async () => {
@@ -62,18 +155,18 @@ export default function HomePage() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${apiBase}/chat/message`, {
+      const data = (await request("/chat/message", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: trimmed, user_id: 1, conversation_id: conversationId })
-      });
+        body: JSON.stringify({ content: trimmed, user_id: 1, conversation_id: conversationId }),
+      })) as Record<string, unknown>;
 
-      const data = await res.json();
-      setConversationId(data.conversation_id ?? null);
-      setTaskId(data.task_id ?? null);
-      setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong while contacting the backend." }]);
+      setConversationId((data.conversation_id as number) ?? null);
+      setTaskId((data.task_id as number) ?? null);
+      addAssistantMessage(String(data.response || "No response from backend."));
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -82,290 +175,301 @@ export default function HomePage() {
   const runAction = async (actionName: string, payload: Record<string, unknown>) => {
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/actions/`, {
+      const data = (await request("/actions/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: 1, conversation_id: conversationId, action_name: actionName, payload }),
-      });
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      const mode = data.result?.execution_mode;
-      if (mode) setExecutionMode(mode);
-      setMessages((prev) => [...prev, { role: "assistant", content: `Action: ${data.action_name} (Task #${data.task_id})\nMode: ${mode ?? "n/a"}\n${JSON.stringify(data.result, null, 2)}` }]);
+      })) as Record<string, unknown>;
+
+      setTaskId((data.task_id as number) ?? null);
+      const result = (data.result || {}) as Record<string, unknown>;
+      const mode = String(result.execution_mode || "action");
+      setExecutionMode(mode);
+      addAssistantMessage(`Action complete: ${String(data.action_name || actionName)}\nMode: ${mode}`);
       await loadApprovals();
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Action "${actionName}" failed.` }]);
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const runOpenHandsExecution = async (requestType: string, title: string, objective: string) => {
+  const runExecution = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/execution/openhands`, {
+      const data = (await request("/execution/openhands", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: 1,
           conversation_id: conversationId,
-          request_type: requestType,
-          title,
-          objective,
-          context: { repo: "jarvis-ai-system" }
-        })
-      });
+          request_type: "code_generation",
+          title: "Draft implementation plan",
+          objective: "Create an implementation plan for the latest user instruction",
+          context: { repo: "jarvis-ai-system" },
+        }),
+      })) as Record<string, unknown>;
 
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      setExecutionMode(data.execution_mode || "openhands_stub");
-      setMessages((prev) => [...prev, { role: "assistant", content: `OpenHands [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
+      setTaskId((data.task_id as number) ?? null);
+      setExecutionMode(String(data.execution_mode || "async"));
+      addAssistantMessage(`Execution started as task #${String(data.task_id || "-")}. I will keep progress in the right panel.`);
       await loadApprovals();
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "OpenHands execution failed." }]);
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const runGitHubExecution = async (requestType: string, title: string, objective: string, context: Record<string, unknown> = {}) => {
+  const runOpsCheck = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/execution/github/`, {
+      const data = (await request("/ops/request", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: 1,
           conversation_id: conversationId,
-          request_type: requestType,
-          title,
-          repo: "ismaelloveexcel/jarvis-ai-system",
-          objective,
-          context
-        })
-      });
-
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      setExecutionMode(data.execution_mode || "github_readonly");
-      setMessages((prev) => [...prev, { role: "assistant", content: `GitHub [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
+          request_type: "maintenance_check",
+          title: "Maintenance check",
+          environment: "dev",
+          context: {},
+        }),
+      })) as Record<string, unknown>;
+      setTaskId((data.task_id as number) ?? null);
+      setExecutionMode(String(data.execution_mode || "ops"));
+      addAssistantMessage(`Maintenance check requested as task #${String(data.task_id || "-")}.`);
       await loadApprovals();
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `GitHub ${requestType} failed.` }]);
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const runGitHubMutation = async (requestType: string, title: string, objective: string, context: Record<string, unknown> = {}) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${apiBase}/execution/github/mutation/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: 1,
-          conversation_id: conversationId,
-          request_type: requestType,
-          title,
-          repo: "ismaelloveexcel/jarvis-ai-system",
-          objective,
-          context
-        })
-      });
-
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      setExecutionMode(data.execution_mode || "pending_approval");
-      setMessages((prev) => [...prev, { role: "assistant", content: `Mutation [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
-      await loadApprovals();
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Mutation ${requestType} failed.` }]);
-    } finally {
-      setLoading(false);
-    }
+  const runSafeWrite = async () => {
+    await runAction("create_file", {
+      relative_path: "example/quick-note.txt",
+      content: `Created from dashboard at ${new Date().toISOString()}\n`,
+    });
   };
 
-  const generateArtifact = async (requestType: string, title: string, content: string, context: Record<string, unknown> = {}) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${apiBase}/artifacts/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: 1,
-          conversation_id: conversationId,
-          request_type: requestType,
-          title,
-          content,
-          context
-        })
-      });
-
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      setExecutionMode("artifact_generation");
-      setMessages((prev) => [...prev, { role: "assistant", content: `Artifact [${requestType}]: Task #${data.task_id}\nArtifact #${data.artifact_id}\n${JSON.stringify(data.result, null, 2)}` }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Artifact ${requestType} failed.` }]);
-    } finally {
-      setLoading(false);
-    }
+  const runRestrictedWrite = async () => {
+    await runAction("create_file", {
+      relative_path: "restricted/requires-approval.txt",
+      content: "This operation should request approval.",
+    });
   };
 
-  const runOpsRequest = async (requestType: string, title: string, environment: string = "dev", context: Record<string, unknown> = {}) => {
-    setLoading(true);
+  const approveItem = async (approval: Approval, notes: string) => {
     try {
-      const res = await fetch(`${apiBase}/ops/request`, {
+      await request(`/approvals/${approval.id}/approve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: 1,
-          conversation_id: conversationId,
-          request_type: requestType,
-          title,
-          environment,
-          context
-        })
-      });
-
-      const data = await res.json();
-      setTaskId(data.task_id ?? null);
-      setExecutionMode(data.execution_mode || "ops_stub");
-      setMessages((prev) => [...prev, { role: "assistant", content: `Ops [${requestType}]: Task #${data.task_id}\nMode: ${data.execution_mode}\n${JSON.stringify(data.result, null, 2)}` }]);
-      await loadApprovals();
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Ops ${requestType} failed.` }]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const viewRunbooks = async () => {
-    try {
-      const res = await fetch(`${apiBase}/ops/runbooks`);
-      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", content: `Runbooks: ${JSON.stringify(data)}` }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: "Runbook lookup failed." }]);
-    }
-  };
-
-  const approveItem = async (approvalId: number) => {
-    try {
-      await fetch(`${apiBase}/approvals/${approvalId}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision_notes: "Approved from UI" })
+        body: JSON.stringify({ decision_notes: notes || "Approved from dashboard" }),
       });
       await loadApprovals();
-      setMessages((prev) => [...prev, { role: "assistant", content: `Approval #${approvalId} approved.` }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Failed to approve #${approvalId}.` }]);
+      setSelectedApproval(null);
+      addAssistantMessage(`Approval #${approval.id} approved.`);
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     }
   };
 
-  const rejectItem = async (approvalId: number) => {
+  const rejectItem = async (approvalId: number, notes: string) => {
     try {
-      await fetch(`${apiBase}/approvals/${approvalId}/reject`, {
+      await request(`/approvals/${approvalId}/reject`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision_notes: "Rejected from UI" })
+        body: JSON.stringify({ decision_notes: notes || "Rejected from dashboard" }),
       });
       await loadApprovals();
-      setMessages((prev) => [...prev, { role: "assistant", content: `Approval #${approvalId} rejected.` }]);
-    } catch {
-      setMessages((prev) => [...prev, { role: "assistant", content: `Failed to reject #${approvalId}.` }]);
+      setSelectedApproval(null);
+      addAssistantMessage(`Approval #${approvalId} rejected.`);
+    } catch (error) {
+      if (error instanceof Error) {
+        addAssistantMessage(error.message);
+      }
     }
   };
+
+  const actionCards: ActionCard[] = useMemo(
+    () => [
+      {
+        title: "Create a safe note",
+        description: "Writes a file in the safe workspace area.",
+        buttonLabel: "Run safe write",
+        onRun: runSafeWrite,
+      },
+      {
+        title: "Try an approval flow",
+        description: "Creates a restricted write so you can approve or reject it.",
+        buttonLabel: "Start approval demo",
+        onRun: runRestrictedWrite,
+      },
+      {
+        title: "Generate a coding plan",
+        description: "Runs OpenHands-style planning as an async task.",
+        buttonLabel: "Start execution",
+        onRun: runExecution,
+      },
+      {
+        title: "Run maintenance check",
+        description: "Checks operational readiness and returns a status report.",
+        buttonLabel: "Run ops check",
+        onRun: runOpsCheck,
+      },
+    ],
+    []
+  );
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
+    <div className="min-h-screen bg-app-bg text-slate-100">
+      <div className="absolute inset-0 -z-10 bg-app-glow" />
+      <div className="flex min-h-screen">
+        <Sidebar pendingApprovals={approvals.length} />
 
-      <main className="flex-1 flex flex-col bg-zinc-950">
-        <div className="border-b border-zinc-800 px-6 py-3 text-sm text-zinc-400 flex gap-4">
-          <span>MCP: {mcpStatus}</span>
-        </div>
+        <main className="flex-1 px-4 py-6 md:px-8">
+          <section className="panel mb-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="eyebrow">Solo Assistant Console</p>
+                <h1 className="hero-title">Run work safely without command-line overhead</h1>
+                <p className="hero-subtitle">
+                  Describe the result you want. Jarvis chooses the safest route, asks for approval when needed, and keeps task progress visible.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pill-button"
+                onClick={() => setShowSettings((value) => !value)}
+              >
+                {showSettings ? "Hide Connection Settings" : "Show Connection Settings"}
+              </button>
+            </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {messages.map((msg, index) => (
-            <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-2xl px-4 py-3 rounded-2xl whitespace-pre-wrap ${msg.role === "user" ? "bg-blue-600" : "bg-zinc-800"}`}>
-                {msg.content}
+            {showSettings && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="input-label" htmlFor="api-base">API Base URL</label>
+                  <input
+                    id="api-base"
+                    className="input-box"
+                    value={apiBase}
+                    readOnly
+                  />
+                </div>
+                <div>
+                  <label className="input-label" htmlFor="api-key">API Key</label>
+                  <input
+                    id="api-key"
+                    className="input-box"
+                    value={apiKey}
+                    onChange={(event) => setApiKey(event.target.value)}
+                    placeholder="Paste X-API-Key here"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="status-chip">API: {healthStatus}</span>
+              <span className="status-chip">MCP: {mcpStatus}</span>
+              <span className="status-chip">Mode: {executionMode}</span>
+              <span className="status-chip">Pending approvals: {approvals.length}</span>
+              {apiProtected && <span className="status-chip status-warning">Protected API key required</span>}
+            </div>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-2">
+            <div className="panel space-y-4">
+              <h2 className="section-title">Ask Jarvis</h2>
+              <div className="chat-log">
+                {messages.map((message, index) => (
+                  <div key={index} className={`chat-row ${message.role === "user" ? "chat-user" : "chat-assistant"}`}>
+                    <div className="chat-bubble">{message.content}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  className="input-box flex-1"
+                  type="text"
+                  value={input}
+                  placeholder="Example: summarize today's system status and suggest next safe action"
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      void sendMessage();
+                    }
+                  }}
+                />
+                <button className="cta-button" onClick={() => void sendMessage()} disabled={loading}>
+                  {loading ? "Working..." : "Send"}
+                </button>
               </div>
             </div>
-          ))}
 
-          {approvals.length > 0 && (
-            <div className="space-y-3 pt-4 border-t border-zinc-800">
-              <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wide">Pending Approvals</h3>
-              {approvals.map((a) => (
-                <div key={a.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-                  <div className="text-sm text-zinc-300 mb-2">
-                    #{a.id} — <span className="font-medium text-white">{a.action_name}</span> (Task #{a.task_id})
+            <div className="panel space-y-4">
+              <h2 className="section-title">Guided Actions</h2>
+              <div className="space-y-3">
+                {actionCards.map((card) => (
+                  <div key={card.title} className="action-card">
+                    <div>
+                      <h3 className="font-semibold">{card.title}</h3>
+                      <p className="text-sm text-slate-300">{card.description}</p>
+                    </div>
+                    <button className="pill-button" disabled={loading} onClick={() => void card.onRun()}>
+                      {card.buttonLabel}
+                    </button>
                   </div>
-                  <div className="flex gap-2">
-                    <button className="rounded-lg bg-green-700 hover:bg-green-600 px-3 py-1.5 text-sm" onClick={() => approveItem(a.id)}>Approve</button>
-                    <button className="rounded-lg bg-red-700 hover:bg-red-600 px-3 py-1.5 text-sm" onClick={() => rejectItem(a.id)}>Reject</button>
+                ))}
+              </div>
+
+              {approvals.length > 0 && (
+                <div className="mt-2 border-t border-white/10 pt-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-amber-200">Pending approvals</h3>
+                  <div className="mt-2 space-y-2">
+                    {approvals.map((approval) => (
+                      <button
+                        key={approval.id}
+                        type="button"
+                        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-left transition hover:border-amber-300/70 hover:bg-white/10"
+                        onClick={() => setSelectedApproval(approval)}
+                      >
+                        <div className="text-sm">#{approval.id} - {approval.action_name}</div>
+                        <div className="text-xs text-slate-300">Task #{approval.task_id}. Click to review and decide.</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+          </section>
+        </main>
 
-        <div className="border-t border-zinc-800 bg-zinc-900 p-4 space-y-3">
-          <div className="flex gap-2">
-            <input className="flex-1 rounded-2xl bg-zinc-800 border border-zinc-700 px-4 py-3 outline-none" type="text" value={input} placeholder="Ask Jarvis something..." onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }} />
-            <button className="rounded-2xl bg-blue-600 px-6 py-3 font-medium disabled:opacity-50" onClick={sendMessage} disabled={loading}>{loading ? "..." : "Send"}</button>
-          </div>
+        <RightPanel
+          taskId={taskId}
+          conversationId={conversationId}
+          executionMode={executionMode}
+          healthStatus={healthStatus}
+          pendingApprovals={approvals.length}
+        />
+      </div>
 
-          <div className="flex gap-2 flex-wrap">
-            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "example/phase7.txt", content: "Hello from Phase 7!\n" + new Date().toISOString() })} disabled={loading}>Safe File Write</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runAction("create_file", { relative_path: "restricted/p7.txt", content: "Requires approval" })} disabled={loading}>Approval Write</button>
-            <button className="rounded-xl bg-zinc-800 border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-700 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://httpbin.org/get" })} disabled={loading}>Allowed HTTP</button>
-            <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runAction("http_request", { url: "https://google.com" })} disabled={loading}>Blocked HTTP</button>
-          </div>
-
-          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500 self-center mr-2">OpenHands:</span>
-            <button className="rounded-xl bg-purple-900 border border-purple-700 px-4 py-2 text-sm hover:bg-purple-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("code_generation", "Generate feature module", "Prepare a plan and stub output for a new feature")} disabled={loading}>Code Gen</button>
-            <button className="rounded-xl bg-purple-900 border border-purple-700 px-4 py-2 text-sm hover:bg-purple-800 disabled:opacity-50" onClick={() => runOpenHandsExecution("bug_fix_plan", "Bug fix analysis", "Analyze and plan a fix for a sample bug")} disabled={loading}>Bug Fix Plan</button>
-          </div>
-
-          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500 self-center mr-2">GitHub:</span>
-            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("repo_inspect", "Inspect repo", "Inspect repository structure", { inspection_scope: "root structure" })} disabled={loading}>Repo Inspect</button>
-            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("patch_proposal", "Patch proposal", "Draft a patch proposal for a new route", { branch_name: "feature/patch-proposal", pr_title: "Proposal: add new route" })} disabled={loading}>Patch Proposal</button>
-            <button className="rounded-xl bg-emerald-900 border border-emerald-700 px-4 py-2 text-sm hover:bg-emerald-800 disabled:opacity-50" onClick={() => runGitHubExecution("pr_draft", "Draft PR", "Prepare a draft PR for review")} disabled={loading}>PR Draft</button>
-            <button className="rounded-xl bg-yellow-900 border border-yellow-700 px-4 py-2 text-sm hover:bg-yellow-800 disabled:opacity-50" onClick={() => runGitHubExecution("repo_write_request", "Write request", "Prepare a write request for a feature branch", { target_branch: "main", proposed_branch: "feature/github-phase6", requested_changes: ["add workflow", "update docs"] })} disabled={loading}>Write Request (approval)</button>
-          </div>
-
-          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500 self-center mr-2">Mutations:</span>
-            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_branch", "Create feature branch", "Prepare a feature branch for docs updates", { base_branch: "main", feature_branch: "feature/phase9-branch", artifact_id: 1 })} disabled={loading}>Create Branch</button>
-            <button className="rounded-xl bg-orange-900 border border-orange-700 px-4 py-2 text-sm hover:bg-orange-800 disabled:opacity-50" onClick={() => runGitHubMutation("create_pr_draft", "Create draft PR", "Prepare a draft PR for proposed docs changes", { base_branch: "main", feature_branch: "feature/phase9-pr", pr_title: "Draft PR: docs changes", artifact_id: 1 })} disabled={loading}>Create PR Draft</button>
-            <button className="rounded-xl bg-red-900 border border-red-700 px-4 py-2 text-sm hover:bg-red-800 disabled:opacity-50" onClick={() => runGitHubMutation("merge_request", "Attempt merge", "Try to merge feature branch into main", { base_branch: "main", feature_branch: "feature/phase9-pr" })} disabled={loading}>Attempt Merge (Blocked)</button>
-          </div>
-
-          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500 self-center mr-2">Artifacts:</span>
-            <button className="rounded-xl bg-cyan-900 border border-cyan-700 px-4 py-2 text-sm hover:bg-cyan-800 disabled:opacity-50" onClick={() => generateArtifact("generate_patch_artifact", "Generate patch artifact", "# Patch Artifact\n\n+ add route\n- remove placeholder\n", { filename: "phase8-change.patch" })} disabled={loading}>Patch Artifact</button>
-            <button className="rounded-xl bg-cyan-900 border border-cyan-700 px-4 py-2 text-sm hover:bg-cyan-800 disabled:opacity-50" onClick={() => generateArtifact("generate_diff_preview", "Generate diff preview", "# Diff Preview\n\n```diff\n+ add endpoint\n- old placeholder\n```", { filename: "phase8-diff-preview.md" })} disabled={loading}>Diff Preview</button>
-          </div>
-
-          <div className="flex gap-2 flex-wrap border-t border-zinc-800 pt-3">
-            <span className="text-xs text-zinc-500 self-center mr-2">Ops:</span>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("maintenance_check", "Maintenance check", "dev")} disabled={loading}>Maintenance Check</button>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("deployment_request", "Deployment request", "staging", { release: "v1-test" })} disabled={loading}>Request Deployment</button>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={() => runOpsRequest("rollback_request", "Rollback request", "staging")} disabled={loading}>Rollback (approval)</button>
-            <button className="rounded-xl bg-teal-900 border border-teal-700 px-4 py-2 text-sm hover:bg-teal-800 disabled:opacity-50" onClick={viewRunbooks} disabled={loading}>View Runbooks</button>
-          </div>
-        </div>
-      </main>
-
-      <RightPanel taskId={taskId} conversationId={conversationId} executionMode={executionMode} />
+      {selectedApproval && (
+        <ApprovalDetail
+          approval={selectedApproval}
+          apiBase={apiBase}
+          apiKey={apiKey}
+          onClose={() => setSelectedApproval(null)}
+          onApprove={approveItem}
+          onReject={rejectItem}
+        />
+      )}
     </div>
   );
 }

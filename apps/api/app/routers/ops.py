@@ -1,22 +1,26 @@
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db, get_background_db
+from app.db.session import get_db
 from app.schemas.ops import OpsRequest, OpsResponse, OpsCapabilitiesResponse, RunbookResponse
 from app.services.task_service import TaskService
 from app.services.approval_service import ApprovalService
 from app.services.audit_service import AuditService
 from app.services.ops_service import OpsService
 from app.guardrails.service import GuardrailService
+from app.core.config import settings
 from app.models.task import TaskStatus
+from app.tasks.ops import run_ops_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _execute_ops_background(task_id: int, request_type: str, title: str, environment: str, context: dict):
+def _execute_ops_inline(task_id: int, request_type: str, title: str, environment: str, context: dict):
+    from app.db.session import get_background_db
+
     db = get_background_db()
     try:
         task_service = TaskService(db)
@@ -25,30 +29,38 @@ def _execute_ops_background(task_id: int, request_type: str, title: str, environ
 
         task = task_service.get_task(task_id)
         if not task:
-            logger.error("Background ops execution: task %s not found", task_id)
+            logger.error("Inline ops execution: task %s not found", task_id)
             return
+
         task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing ops request")
         task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing ops request")
 
         result = ops_service.run(
-            request_type=request_type, title=title, environment=environment, context=context,
+            request_type=request_type,
+            title=title,
+            environment=environment,
+            context=context,
         )
 
         task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
         audit_service.log(
-            event_type="ops_completed", event_status="completed",
-            details_json=result, task_id=task.id,
+            event_type="ops_completed",
+            event_status="completed",
+            details_json=result,
+            task_id=task.id,
         )
     except Exception as exc:
-        logger.exception("Background ops execution failed for task %s", task_id)
+        logger.exception("Inline ops execution failed for task %s", task_id)
         task_service = TaskService(db)
         audit_service = AuditService(db)
         task = task_service.get_task(task_id)
         if task:
             task_service.update_task_status(task, TaskStatus.FAILED, current_step="failed", result_json={"error": str(exc)})
             audit_service.log(
-                event_type="ops_failed", event_status="failed",
-                details_json={"error": str(exc)}, task_id=task.id,
+                event_type="ops_failed",
+                event_status="failed",
+                details_json={"error": str(exc)},
+                task_id=task.id,
             )
     finally:
         db.close()
@@ -93,7 +105,7 @@ def ops_task_status(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/request", response_model=OpsResponse, status_code=202)
-def ops_request(payload: OpsRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def ops_request(payload: OpsRequest, db: Session = Depends(get_db)):
     task_service = TaskService(db)
     approval_service = ApprovalService(db)
     audit_service = AuditService(db)
@@ -183,17 +195,35 @@ def ops_request(payload: OpsRequest, background_tasks: BackgroundTasks, db: Sess
 
     task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="queued for execution")
 
-    background_tasks.add_task(
-        _execute_ops_background,
-        task_id=task.id,
-        request_type=payload.request_type,
-        title=payload.title,
-        environment=payload.environment,
-        context=payload.context,
-    )
+    celery_task_id = None
+    try:
+        celery_task = run_ops_request.delay(
+            task_id=task.id,
+            request_type=payload.request_type,
+            title=payload.title,
+            environment=payload.environment,
+            context=payload.context,
+        )
+        celery_task_id = celery_task.id
+    except Exception as exc:
+        if settings.APP_ENV == "production":
+            logger.error("Celery unavailable in production for task %s: %s", task.id, exc)
+            raise HTTPException(status_code=503, detail="Async queue unavailable")
+        logger.warning("Celery unavailable; falling back to inline ops execution for task %s: %s", task.id, exc)
+        _execute_ops_inline(
+            task_id=task.id,
+            request_type=payload.request_type,
+            title=payload.title,
+            environment=payload.environment,
+            context=payload.context,
+        )
 
     return OpsResponse(
         task_id=task.id,
         execution_mode="async",
-        result={"status": "accepted", "message": "Task queued for background execution"},
+        result={
+            "status": "accepted",
+            "message": "Task accepted for async execution",
+            "celery_task_id": celery_task_id,
+        },
     )

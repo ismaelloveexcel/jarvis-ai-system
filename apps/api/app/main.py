@@ -1,4 +1,6 @@
 import logging
+import subprocess
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
@@ -28,6 +30,31 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[settings.RATE_LIM
 async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("starting", extra={"app": settings.APP_NAME, "env": settings.APP_ENV})
+    
+    # Run Alembic migrations on startup
+    try:
+        logger.info("Running database migrations...")
+        default_cwd = Path("/app")
+        local_cwd = Path(__file__).resolve().parents[2]
+        alembic_cwd = default_cwd if default_cwd.exists() else local_cwd
+        result = subprocess.run(
+            ["alembic", "upgrade", "head"],
+            cwd=str(alembic_cwd),
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "Alembic migration completed with warnings: %s", result.stderr
+            )
+        else:
+            logger.info("Database migrations completed successfully")
+    except subprocess.TimeoutExpired:
+        logger.warning("Database migration timeout (60s); continuing startup")
+    except Exception as exc:
+        logger.error("Failed to run migrations: %s", exc)
+    
     yield
 
 

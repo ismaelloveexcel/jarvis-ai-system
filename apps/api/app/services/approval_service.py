@@ -32,9 +32,11 @@ class ApprovalService:
     def get_approval(self, approval_id: int) -> Approval | None:
         return self.db.query(Approval).filter(Approval.id == approval_id).first()
 
-    def approve(self, approval: Approval, decision_notes: str | None = None) -> Approval:
+    def approve(self, approval: Approval, decision_notes: str | None = None, approved_by_user_id: int | None = None) -> Approval:
         approval.status = "approved"
         approval.decision_notes = decision_notes
+        approval.approved_by = approved_by_user_id
+        approval.approved_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(approval)
         return approval

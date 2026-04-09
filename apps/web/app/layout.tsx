@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Jarvis Assistant",
-  description: "Jarvis Assistant Phase 1"
+  title: "Jarvis Operator Console",
+  description: "Guided solo-operator interface for approvals, tasks, and safe automation"
 };
 
 export default function RootLayout({

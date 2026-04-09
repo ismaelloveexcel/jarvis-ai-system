@@ -5,12 +5,19 @@ services:
     environment:
       POSTGRES_DB: jarvis_db
       POSTGRES_USER: jarvis
-      POSTGRES_PASSWORD: changeme123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jarvis}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
   api:
@@ -21,12 +28,13 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://jarvis:changeme123@postgres:5432/jarvis_db
+      DATABASE_URL: postgresql://jarvis:${POSTGRES_PASSWORD:-jarvis}@postgres:5432/jarvis_db
       JARVIS_WORKSPACE_DIR: /app/workspace
     ports:
       - "8000:8000"
     depends_on:
       - postgres
+      - redis
     volumes:
       - ./workspace/generated:/app/workspace
       - ./docs/runbooks:/app/docs/runbooks

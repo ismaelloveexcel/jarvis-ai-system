@@ -1,3 +1,5 @@
+import secrets
+import os
 from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -5,12 +7,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_NAME: str = "Jarvis Assistant"
-    SECRET_KEY: str = "change-me"
+    SECRET_KEY: str = ""
 
     API_KEY: str = ""
     RATE_LIMIT: str = "60/minute"
 
-    DATABASE_URL: str = "postgresql://jarvis:changeme123@postgres:5432/jarvis_db"
+    DATABASE_URL: str = "postgresql://jarvis:jarvis@postgres:5432/jarvis_db"
+
+    CELERY_BROKER_URL: str = "redis://redis:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://redis:6379/1"
 
     LLM_PROVIDER: Literal["openai", "anthropic", "xai"] = "openai"
     LLM_MODEL: str = "gpt-4o-mini"
@@ -49,6 +54,19 @@ class Settings(BaseSettings):
     OPS_ALLOW_LIVE_MAINTENANCE: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        secret_key_env = data.get("SECRET_KEY") or os.getenv("SECRET_KEY", "")
+        if not self.SECRET_KEY or self.SECRET_KEY == "":
+            # Dev convenience: generate a transient key if none is provided.
+            self.SECRET_KEY = secrets.token_urlsafe(32)
+
+        if self.APP_ENV == "production":
+            if not secret_key_env:
+                raise ValueError("SECRET_KEY must be explicitly set in production.")
+            if not self.API_KEY:
+                raise ValueError("API_KEY must be set in production.")
 
 
 settings = Settings()

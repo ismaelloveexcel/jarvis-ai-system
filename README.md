@@ -40,6 +40,26 @@ npm run dev
 ### 4. Open
 http://localhost:3000
 
+## Production-style deployment (single host)
+
+Use the production compose stack to run API + worker + web + postgres + redis.
+
+```bash
+cp .env.example .env
+
+# REQUIRED for production mode
+# APP_ENV=production
+# SECRET_KEY=<strong-random-value>
+# API_KEY=<strong-random-value>
+# POSTGRES_PASSWORD=<strong-random-value>
+
+docker compose -f docker-compose.prod.yml up -d --build
+
+# Verify
+curl http://localhost:8000/health
+curl -I http://localhost:3000
+```
+
 ## Auth
 
 Set `API_KEY` in `.env` to require `X-API-Key` header on all requests.
@@ -101,5 +121,5 @@ python -m pytest tests/ -v
 ## Notes
 - Live providers remain disabled — all external integrations run in stub mode
 - No user auth / RBAC — API key auth only
-- No background workers — `/execution/*`, `/execution/github/*`, and `/ops/request` queue work via FastAPI `BackgroundTasks` and return 202 (in-process async, not a separate worker queue)
+- Background workers are supported via Celery + Redis (`worker` service in `docker-compose.prod.yml`)
 - See `docs/v1-closeout.md` for full V1 scope and boundaries
