@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db
+from app.db.session import get_db, get_background_db
 from app.schemas.execution import (
     OpenHandsExecutionRequest,
     OpenHandsExecutionResponse,
@@ -15,6 +17,56 @@ from app.guardrails.service import GuardrailService
 from app.models.task import TaskStatus
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _execute_openhands_background(task_id: int, request_type: str, title: str, objective: str, context: dict):
+    db = get_background_db()
+    try:
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        openhands_service = OpenHandsService()
+
+        task = task_service.get_task(task_id)
+        if not task:
+            logger.error("Background openhands execution: task %s not found", task_id)
+            return
+        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing execution")
+        task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning execution")
+        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing with OpenHands")
+
+        audit_service.log(
+            event_type="openhands_requested",
+            event_status="started",
+            details_json={"request_type": request_type, "title": title},
+            task_id=task.id,
+        )
+
+        result = openhands_service.run(
+            request_type=request_type,
+            title=title,
+            objective=objective,
+            context=context,
+        )
+
+        task_service.update_task_status(task, TaskStatus.COMPLETED, current_step="completed", result_json=result)
+        audit_service.log(
+            event_type="openhands_completed", event_status="completed",
+            details_json=result, task_id=task.id,
+        )
+    except Exception as exc:
+        logger.exception("Background openhands execution failed for task %s", task_id)
+        task_service = TaskService(db)
+        audit_service = AuditService(db)
+        task = task_service.get_task(task_id)
+        if task:
+            task_service.update_task_status(task, TaskStatus.FAILED, current_step="failed", result_json={"error": str(exc)})
+            audit_service.log(
+                event_type="openhands_failed", event_status="failed",
+                details_json={"error": str(exc)}, task_id=task.id,
+            )
+    finally:
+        db.close()
 
 
 @router.get("/capabilities", response_model=OpenHandsCapabilityResponse)
@@ -37,8 +89,8 @@ def execution_status(task_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.post("/openhands", response_model=OpenHandsExecutionResponse)
-def run_openhands(payload: OpenHandsExecutionRequest, db: Session = Depends(get_db)):
+@router.post("/openhands", response_model=OpenHandsExecutionResponse, status_code=202)
+def run_openhands(payload: OpenHandsExecutionRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     task_service = TaskService(db)
     approval_service = ApprovalService(db)
     audit_service = AuditService(db)
@@ -130,60 +182,19 @@ def run_openhands(payload: OpenHandsExecutionRequest, db: Session = Depends(get_
             },
         )
 
-    try:
-        task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="analyzing execution")
-        task_service.update_task_status(task, TaskStatus.PLANNING, current_step="planning execution")
-        task_service.update_task_status(task, TaskStatus.EXECUTING, current_step="executing with OpenHands")
+    task_service.update_task_status(task, TaskStatus.ANALYZING, current_step="queued for execution")
 
-        audit_service.log(
-            event_type="openhands_requested",
-            event_status="started",
-            details_json={"request_type": payload.request_type, "title": payload.title},
-            task_id=task.id,
-        )
+    background_tasks.add_task(
+        _execute_openhands_background,
+        task_id=task.id,
+        request_type=payload.request_type,
+        title=payload.title,
+        objective=payload.objective,
+        context=payload.context,
+    )
 
-        result = openhands_service.run(
-            request_type=payload.request_type,
-            title=payload.title,
-            objective=payload.objective,
-            context=payload.context,
-        )
-
-        task_service.update_task_status(
-            task,
-            TaskStatus.COMPLETED,
-            current_step="completed",
-            result_json=result,
-        )
-
-        audit_service.log(
-            event_type="openhands_completed",
-            event_status="completed",
-            details_json=result,
-            task_id=task.id,
-        )
-
-        return OpenHandsExecutionResponse(
-            task_id=task.id,
-            execution_mode=result.get("execution_mode", "openhands_stub"),
-            result=result,
-        )
-
-    except Exception as exc:
-        task_service.update_task_status(
-            task,
-            TaskStatus.FAILED,
-            current_step="failed",
-            result_json={"error": str(exc)},
-        )
-        audit_service.log(
-            event_type="openhands_failed",
-            event_status="failed",
-            details_json={"error": str(exc)},
-            task_id=task.id,
-        )
-        return OpenHandsExecutionResponse(
-            task_id=task.id,
-            execution_mode="failed",
-            result={"status": "failed", "error": str(exc)},
-        )
+    return OpenHandsExecutionResponse(
+        task_id=task.id,
+        execution_mode="async",
+        result={"status": "accepted", "message": "Task queued for background execution"},
+    )

@@ -1,29 +1,50 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
 .venv/
-.env
+venv/
+env/
 
-# Node
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.db
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Node / Next
 node_modules/
 .next/
 out/
 
-# OS / Editor
-.DS_Store
-.vscode/
-.idea/
-
 # Logs
 *.log
 
-# Docker volumes / temp
-postgres_data/
+# Alembic
+alembic/versions/__pycache__/
 
-# Jarvis local generated outputs
+# Runtime artifacts
 workspace/generated/*
 !workspace/generated/.gitkeep
-
-# Jarvis artifact outputs
 workspace/artifacts/*
 !workspace/artifacts/.gitkeep
+
+# Docker volumes
+postgres_data/

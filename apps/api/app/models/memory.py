@@ -1,9 +1,10 @@
 from sqlalchemy import ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+
+from app.models.base import Base, MutableTimestampMixin
 
 
-class Memory(Base):
+class Memory(MutableTimestampMixin, Base):
     __tablename__ = "memories"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

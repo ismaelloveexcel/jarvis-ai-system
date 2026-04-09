@@ -1,7 +1,11 @@
 import enum
-from sqlalchemy import Enum as SQLEnum, ForeignKey, JSON, String
+from datetime import datetime
+
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
-from app.models.base import Base
+from sqlalchemy.sql import func
+
+from app.models.base import Base, MutableTimestampMixin
 
 
 class TaskStatus(str, enum.Enum):
@@ -15,7 +19,7 @@ class TaskStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class Task(Base):
+class Task(MutableTimestampMixin, Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -27,3 +31,5 @@ class Task(Base):
     current_step: Mapped[str | None] = mapped_column(String, nullable=True)
     context_json: Mapped[dict] = mapped_column(JSON, default=dict)
     result_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -18,5 +18,8 @@ class AuditService:
         self.db.refresh(record)
         return record
 
-    def list_logs(self) -> list[AuditLog]:
-        return self.db.query(AuditLog).order_by(AuditLog.id.desc()).all()
+    def list_logs(self, event_type: str | None = None, limit: int = 50, offset: int = 0) -> list[AuditLog]:
+        q = self.db.query(AuditLog)
+        if event_type:
+            q = q.filter(AuditLog.event_type == event_type)
+        return q.order_by(AuditLog.id.desc()).offset(offset).limit(limit).all()

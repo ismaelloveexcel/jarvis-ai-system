@@ -1,13 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Literal
 
 
 class OpenHandsExecutionRequest(BaseModel):
-    user_id: int = 1
+    user_id: int = Field(default=1, ge=1)
     conversation_id: int | None = None
     request_type: Literal["code_generation", "repo_scaffold", "file_refactor", "bug_fix_plan"]
-    title: str
-    objective: str
+    title: str = Field(..., min_length=1, max_length=500)
+    objective: str = Field(..., min_length=1, max_length=5000)
     context: dict[str, Any] = {}
 
 

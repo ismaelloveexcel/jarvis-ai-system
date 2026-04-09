@@ -12,3 +12,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def get_background_db() -> Session:
+    """Create a standalone session for background tasks (not tied to request lifecycle)."""
+    return SessionLocal()

@@ -8,3 +8,6 @@ python-dotenv==1.0.1
 litellm==1.52.0
 langgraph==0.2.45
 requests==2.32.3
+alembic==1.13.1
+slowapi==0.1.9
+python-json-logger==2.0.7

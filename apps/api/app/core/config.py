@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "Jarvis Assistant"
     SECRET_KEY: str = "change-me"
 
+    API_KEY: str = ""
+    RATE_LIMIT: str = "60/minute"
+
     DATABASE_URL: str = "postgresql://jarvis:changeme123@postgres:5432/jarvis_db"
 
     LLM_PROVIDER: Literal["openai", "anthropic", "xai"] = "openai"
